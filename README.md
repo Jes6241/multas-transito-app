@@ -1,2 +1,0 @@
-# multas-transito-app
-app
