@@ -38,7 +38,7 @@ export default function CorralónHomeScreen({ navigation }) {
     try {
       // Cargar solicitudes pendientes
       const resSolicitudes = await fetch(`${API_URL}/api/solicitudes-grua`);
-      const dataSolicitudes = await resSolicitudes.json();
+      const dataSolicitudes = await resSolicitudes. json();
 
       if (dataSolicitudes.success) {
         const pendientes = dataSolicitudes.solicitudes.filter(
@@ -50,12 +50,14 @@ export default function CorralónHomeScreen({ navigation }) {
 
       // Cargar vehículos en corralón
       const resCorralon = await fetch(`${API_URL}/api/corralon`);
-      const dataCorralon = await resCorralon.json();
+      const dataCorralon = await resCorralon. json();
 
       if (dataCorralon.success) {
+        // ARREGLADO:  Buscar 'ingresado', 'pendiente_pago', 'listo_liberar' 
         const enCorralon = dataCorralon.vehiculos.filter(
-          (v) => v.estatus === 'retenido'
+          (v) => v.estatus === 'ingresado' || v.estatus === 'pendiente_pago' || v. estatus === 'listo_liberar'
         ).length;
+        
         const hoy = dataCorralon.vehiculos.filter((v) => {
           const fecha = new Date(v.fecha_ingreso).toDateString();
           return fecha === new Date().toDateString();
@@ -101,7 +103,7 @@ export default function CorralónHomeScreen({ navigation }) {
         <View style={styles.headerRight}>
           <View style={styles.onlineBadge}>
             <Ionicons name="wifi" size={14} color="#fff" />
-            <Text style={styles. onlineText}>En línea</Text>
+            <Text style={styles.onlineText}>En línea</Text>
           </View>
           <TouchableOpacity onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={28} color="#fff" />
@@ -175,7 +177,7 @@ export default function CorralónHomeScreen({ navigation }) {
           🚛 Grúas en Camino ({solicitudesPendientes.length})
         </Text>
 
-        {solicitudesPendientes.length === 0 ? (
+        {solicitudesPendientes.length === 0 ?  (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle" size={50} color="#10B981" />
             <Text style={styles.emptyTitle}>Todo en orden</Text>
@@ -193,7 +195,7 @@ export default function CorralónHomeScreen({ navigation }) {
                 }
               >
                 <View style={styles.solicitudHeader}>
-                  <Text style={styles. solicitudGrua}>
+                  <Text style={styles.solicitudGrua}>
                     🚛 {solicitud. gruas?. numero || 'Grúa'}
                   </Text>
                   <View style={styles.enCaminoBadge}>
@@ -205,7 +207,7 @@ export default function CorralónHomeScreen({ navigation }) {
                 <Text style={styles.solicitudOperador}>
                   👷 {solicitud. gruas?.operador_nombre}
                 </Text>
-                <Text style={styles.solicitudTelefono}>
+                <Text style={styles. solicitudTelefono}>
                   📞 {solicitud.gruas?.operador_telefono}
                 </Text>
                 <Text style={styles.solicitudUbicacion}>
@@ -253,7 +255,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: { color: '#DDD6FE', fontSize: 14 },
   headerTitle: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  headerRight: { flexDirection: 'row', alignItems:  'center', gap: 15 },
   onlineBadge:  {
     flexDirection: 'row',
     alignItems: 'center',
@@ -270,15 +272,15 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
-    ... SHADOWS. small,
+    ... SHADOWS.small,
   },
   statNumber: { fontSize: 28, fontWeight: 'bold', color:  '#1F2937', marginTop: 5 },
-  statLabel: { fontSize: 12, color: '#6B7280' },
-  verMas: { fontSize:  12, color:  '#3B82F6', marginTop: 5 },
+  statLabel: { fontSize:  12, color: '#6B7280' },
+  verMas: { fontSize: 12, color: '#3B82F6', marginTop: 5 },
   section: { padding: 15 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
+  sectionTitle: { fontSize:  18, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
   actionsGrid: { flexDirection: 'row', gap: 15 },
-  actionCard:  {
+  actionCard: {
     flex: 1,
     backgroundColor: '#fff',
     padding:  20,
@@ -296,7 +298,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   actionText: { fontSize: 14, fontWeight: '600', color: '#1F2937', textAlign: 'center' },
-  badge: {
+  badge:  {
     position: 'absolute',
     top: 10,
     right: 10,
@@ -307,10 +309,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  emptyState:  {
+  badgeText: { color:  '#fff', fontSize:  12, fontWeight: 'bold' },
+  emptyState: {
     backgroundColor: '#fff',
-    padding: 40,
+    padding:  40,
     borderRadius: 12,
     alignItems: 'center',
     ... SHADOWS.small,
@@ -332,7 +334,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  solicitudGrua: { fontSize: 18, fontWeight: 'bold', color:  '#1F2937' },
+  solicitudGrua: { fontSize:  18, fontWeight: 'bold', color: '#1F2937' },
   enCaminoBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,7 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 5,
   },
-  enCaminoText: { color: '#92400E', fontSize: 12, fontWeight:  '600' },
+  enCaminoText: { color: '#92400E', fontSize:  12, fontWeight: '600' },
   solicitudOperador: { color: '#4B5563', marginBottom: 2 },
   solicitudTelefono: { color: '#6366F1', marginBottom: 2 },
   solicitudUbicacion:  { color: '#6B7280', fontSize: 13, marginBottom: 10 },
@@ -350,9 +352,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F9FF',
     padding: 12,
     borderRadius: 8,
-    marginBottom:  15,
+    marginBottom: 15,
   },
-  vehiculosTitle: { fontSize: 14, fontWeight: '600', color: '#0369A1', marginBottom: 8 },
+  vehiculosTitle:  { fontSize: 14, fontWeight: '600', color: '#0369A1', marginBottom: 8 },
   vehiculoItem: {
     backgroundColor: '#fff',
     padding:  10,
@@ -364,13 +366,13 @@ const styles = StyleSheet.create({
   vehiculoPlaca: { fontSize: 15, fontWeight: 'bold', color:  '#1E40AF' },
   vehiculoInfo: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   recibirBtn: {
-    flexDirection:  'row',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#10B981',
-    padding: 12,
+    padding:  12,
     borderRadius: 8,
-    gap: 8,
+    gap:  8,
   },
   recibirBtnText:  { color: '#fff', fontWeight: '600', fontSize: 16 },
 });

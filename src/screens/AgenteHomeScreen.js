@@ -24,7 +24,7 @@ export default function AgenteHomeScreen({ navigation }) {
   const [stats, setStats] = useState({
     multasHoy: 0,
     multasPendientes: 0,
-    gruasSolicitadas:  0,
+    gruasSolicitadas: 0,
   });
 
   useEffect(() => {
@@ -56,7 +56,9 @@ export default function AgenteHomeScreen({ navigation }) {
 
           if (dataMultas. success) {
             const hoy = new Date();
-            multasDeHoy = (dataMultas.multas || []).filter((m) => {
+            // Filtrar solo las multas del agente actual
+            const misMultas = (dataMultas.multas || []).filter(m => m.agente_id === user?. id);
+            multasDeHoy = misMultas.filter((m) => {
               const fechaMulta = new Date(m.created_at);
               return (
                 fechaMulta.getDate() === hoy.getDate() &&
@@ -88,7 +90,7 @@ export default function AgenteHomeScreen({ navigation }) {
         gruasSolicitadas: gruasHoyCount,
       });
     } catch (error) {
-      console.error('Error cargando datos:', error);
+      console. error('Error cargando datos:', error);
     } finally {
       setRefreshing(false);
     }
@@ -120,7 +122,7 @@ export default function AgenteHomeScreen({ navigation }) {
   const handleLogout = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro? ', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Salir', onPress: logout, style: 'destructive' },
+      { text: 'Salir', onPress:  logout, style: 'destructive' },
     ]);
   };
 
@@ -134,7 +136,7 @@ export default function AgenteHomeScreen({ navigation }) {
       <View style={styles. header}>
         <View>
           <Text style={styles.greeting}>Agente</Text>
-          <Text style={styles.userName}>{user?.nombre || 'Usuario'}</Text>
+          <Text style={styles. userName}>{user?.nombre || 'Usuario'}</Text>
         </View>
         <View style={styles.headerRight}>
           <View
@@ -152,7 +154,7 @@ export default function AgenteHomeScreen({ navigation }) {
               {isOnline ? 'En línea' : 'Sin conexión'}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+          <TouchableOpacity onPress={handleLogout} style={styles. logoutBtn}>
             <Ionicons name="log-out-outline" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -162,29 +164,29 @@ export default function AgenteHomeScreen({ navigation }) {
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline" size={24} color="#F59E0B" />
           <Text style={styles.offlineText}>
-            Modo sin conexión.  Las multas se guardarán localmente.
+            Modo sin conexión.  Las multas se guardarán localmente. 
           </Text>
         </View>
       )}
 
-      <View style={styles.statsContainer}>
+      <View style={styles. statsContainer}>
         <TouchableOpacity
           style={[styles.statCard, { backgroundColor: '#DBEAFE' }]}
-          onPress={() => navigation.navigate('MultasHoy')}
+          onPress={() => navigation.navigate('MiHistorial')}
         >
           <Ionicons name="document-text" size={28} color="#3B82F6" />
           <Text style={styles.statNumero}>{stats.multasHoy}</Text>
-          <Text style={styles.statLabel}>Multas Hoy</Text>
+          <Text style={styles.statLabel}>Mis Multas Hoy</Text>
           <Text style={styles.verMas}>Ver →</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles. statCard, { backgroundColor: '#FEF3C7' }]}
+          style={[styles.statCard, { backgroundColor: '#FEF3C7' }]}
           onPress={() => navigation.navigate('MultasOffline')}
         >
           <Ionicons name="cloud-upload" size={28} color="#F59E0B" />
           <Text style={styles.statNumero}>{stats.multasPendientes}</Text>
-          <Text style={styles.statLabel}>Pendientes</Text>
+          <Text style={styles. statLabel}>Pendientes</Text>
           <Text style={styles.verMas}>Ver →</Text>
         </TouchableOpacity>
 
@@ -193,39 +195,75 @@ export default function AgenteHomeScreen({ navigation }) {
           onPress={() => navigation.navigate('GruasSolicitadas')}
         >
           <Ionicons name="car" size={28} color="#6366F1" />
-          <Text style={styles.statNumero}>{stats. gruasSolicitadas}</Text>
+          <Text style={styles.statNumero}>{stats.gruasSolicitadas}</Text>
           <Text style={styles.statLabel}>Grúas</Text>
           <Text style={styles. verMas}>Ver →</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Acciones</Text>
+      <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
       <View style={styles.menuGrid}>
+        {/* Escanear Placa */}
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('ScanPlaca')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#ECFDF5' }]}>
+            <Ionicons name="scan" size={30} color="#059669" />
+          </View>
+          <Text style={styles.menuText}>Escanear Placa</Text>
+        </TouchableOpacity>
+
+        {/* Levantar Multa */}
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate('LevantarMulta')}
         >
-          <View style={[styles.menuIcon, { backgroundColor: '#FEE2E2' }]}>
+          <View style={[styles. menuIcon, { backgroundColor: '#FEE2E2' }]}>
             <Ionicons name="add-circle" size={30} color="#EF4444" />
           </View>
           <Text style={styles.menuText}>Levantar Multa</Text>
         </TouchableOpacity>
 
+        {/* Parquímetros */}
+        <TouchableOpacity
+          style={styles. menuItem}
+          onPress={() => navigation.navigate('VerificarParquimetro')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor:  '#EDE9FE' }]}>
+            <Ionicons name="time" size={30} color="#8B5CF6" />
+          </View>
+          <Text style={styles.menuText}>Parquímetros</Text>
+        </TouchableOpacity>
+
+        {/* Solicitar Grúa */}
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate('SolicitarGrua')}
         >
-          <View style={[styles. menuIcon, { backgroundColor: '#E0E7FF' }]}>
+          <View style={[styles.menuIcon, { backgroundColor:  '#E0E7FF' }]}>
             <Ionicons name="car-sport" size={30} color="#6366F1" />
           </View>
           <Text style={styles.menuText}>Solicitar Grúa</Text>
         </TouchableOpacity>
 
+        {/* Mi Historial */}
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('MiHistorial')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor:  '#DBEAFE' }]}>
+            <Ionicons name="bar-chart" size={30} color="#3B82F6" />
+          </View>
+          <Text style={styles.menuText}>Mi Historial</Text>
+        </TouchableOpacity>
+
+        {/* Multas Offline */}
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate('MultasOffline')}
         >
-          <View style={[styles. menuIcon, { backgroundColor: '#FEF3C7' }]}>
+          <View style={[styles.menuIcon, { backgroundColor:  '#FEF3C7' }]}>
             <Ionicons name="cloud-offline" size={30} color="#F59E0B" />
           </View>
           <Text style={styles.menuText}>Multas Offline</Text>
@@ -235,19 +273,9 @@ export default function AgenteHomeScreen({ navigation }) {
             </View>
           )}
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate('Historial')}
-        >
-          <View style={[styles. menuIcon, { backgroundColor: '#D1FAE5' }]}>
-            <Ionicons name="time" size={30} color="#10B981" />
-          </View>
-          <Text style={styles. menuText}>Historial</Text>
-        </TouchableOpacity>
       </View>
 
-      {multasOffline. length > 0 && isOnline && (
+      {multasOffline.length > 0 && isOnline && (
         <TouchableOpacity style={styles.syncButton} onPress={sincronizar}>
           <Ionicons name="sync" size={24} color="#fff" />
           <Text style={styles. syncButtonText}>
@@ -256,7 +284,16 @@ export default function AgenteHomeScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      <Text style={styles.sectionTitle}>Últimas Multas Levantadas</Text>
+      {/* Botón de Emergencia */}
+      <TouchableOpacity
+        style={styles.emergenciaBtn}
+        onPress={() => navigation.navigate('Emergencia')}
+      >
+        <Ionicons name="warning" size={24} color="#fff" />
+        <Text style={styles. emergenciaBtnText}>EMERGENCIA</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Mis Últimas Multas</Text>
       {multasHoy. length > 0 ? (
         multasHoy.slice(0, 3).map((multa, index) => (
           <TouchableOpacity
@@ -282,7 +319,7 @@ export default function AgenteHomeScreen({ navigation }) {
       ) : (
         <View style={styles.emptyState}>
           <Ionicons name="document-text-outline" size={50} color="#D1D5DB" />
-          <Text style={styles.emptyText}>No hay multas levantadas hoy</Text>
+          <Text style={styles.emptyText}>No has levantado multas hoy</Text>
           <TouchableOpacity
             style={styles. levantarBtn}
             onPress={() => navigation.navigate('LevantarMulta')}
@@ -301,7 +338,7 @@ export default function AgenteHomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor:  '#F3F4F6',
+    backgroundColor: '#F3F4F6',
   },
   header: {
     backgroundColor: '#1E40AF',
@@ -317,13 +354,13 @@ const styles = StyleSheet.create({
   },
   userName:  {
     color: '#fff',
-    fontSize:  24,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap:  10,
+    gap: 10,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -350,13 +387,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 10,
   },
-  offlineText: {
+  offlineText:  {
     flex: 1,
     color: '#92400E',
     fontSize: 13,
   },
   statsContainer: {
-    flexDirection: 'row',
+    flexDirection:  'row',
     paddingHorizontal:  15,
     marginTop: 15,
     gap: 10,
@@ -374,8 +411,9 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color:  '#6B7280',
+    textAlign: 'center',
   },
   verMas: {
     fontSize: 11,
@@ -393,7 +431,7 @@ const styles = StyleSheet.create({
   },
   menuGrid: {
     flexDirection:  'row',
-    flexWrap:  'wrap',
+    flexWrap: 'wrap',
     paddingHorizontal:  10,
   },
   menuItem: {
@@ -415,7 +453,7 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 14,
-    color:  '#4B5563',
+    color: '#4B5563',
     textAlign: 'center',
     fontWeight: '600',
   },
@@ -425,8 +463,8 @@ const styles = StyleSheet.create({
     right:  10,
     backgroundColor: '#EF4444',
     borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal:  8,
+    paddingVertical:  2,
   },
   badgeText: {
     color: '#fff',
@@ -449,6 +487,22 @@ const styles = StyleSheet.create({
     fontSize:  16,
     fontWeight: 'bold',
   },
+  emergenciaBtn: {
+    backgroundColor: '#DC2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 15,
+    marginTop:  15,
+    padding:  15,
+    borderRadius: 12,
+    gap:  10,
+  },
+  emergenciaBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   multaCard: {
     backgroundColor: '#fff',
     marginHorizontal: 15,
@@ -461,12 +515,12 @@ const styles = StyleSheet.create({
     ... SHADOWS.small,
   },
   multaInfo:  {
-    flex: 1,
+    flex:  1,
   },
   multaFolio: {
     fontSize: 16,
     fontWeight: 'bold',
-    color:  '#1E40AF',
+    color: '#1E40AF',
   },
   multaPlaca: {
     fontSize: 14,
@@ -475,7 +529,7 @@ const styles = StyleSheet.create({
   },
   multaTipo:  {
     fontSize:  12,
-    color: '#6B7280',
+    color:  '#6B7280',
     marginTop: 2,
   },
   multaRight: {
@@ -491,7 +545,7 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems:  'center',
     padding: 30,
-    backgroundColor:  '#fff',
+    backgroundColor: '#fff',
     marginHorizontal: 15,
     borderRadius: 12,
     ... SHADOWS.small,
@@ -505,8 +559,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EF4444',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal:  20,
+    paddingVertical:  10,
     borderRadius: 8,
     gap:  8,
   },

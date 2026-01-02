@@ -11,19 +11,25 @@ import AgenteHomeScreen from '../screens/AgenteHomeScreen';
 import LevantarMultaScreen from '../screens/LevantarMultaScreen';
 import SolicitarGruaScreen from '../screens/SolicitarGruaScreen';
 import GruasSolicitadasScreen from '../screens/GruasSolicitadasScreen';
-import HistorialScreen from '../screens/HistorialScreen';
 import MultasOfflineScreen from '../screens/MultasOfflineScreen';
-import DetalleMultaScreen from '../screens/DetalleMultaScreen';
+import DetalleMultaAgenteScreen from '../screens/DetalleMultaAgenteScreen';
+import VerificarParquimetroScreen from '../screens/VerificarParquimetroScreen';
+import ScanPlacaScreen from '../screens/ScanPlacaScreen';
+import MiHistorialScreen from '../screens/MiHistorialScreen';
+import EmergenciaScreen from '../screens/EmergenciaScreen';
 
 // Screens Corralón
 import CorralónHomeScreen from '../screens/CorralónHomeScreen';
 import RecibirVehiculoScreen from '../screens/RecibirVehiculoScreen';
 import VehiculosCorralónScreen from '../screens/VehiculosCorralónScreen';
+import DetalleVehiculoCorralónScreen from '../screens/DetalleVehiculoCorralónScreen';
 
 // Screens Admin
 import AdminHomeScreen from '../screens/AdminHomeScreen';
+import HistorialScreen from '../screens/HistorialScreen';
+import DetalleMultaScreen from '../screens/DetalleMultaScreen';
 
-// Screens Ciudadano (usa HomeScreen que ya tienes)
+// Screens Ciudadano
 import HomeScreen from '../screens/HomeScreen';
 import BuscarMultaScreen from '../screens/BuscarMultaScreen';
 import BuscarFolioScreen from '../screens/BuscarFolioScreen';
@@ -35,28 +41,28 @@ const Stack = createNativeStackNavigator();
 export default function AppNavigator() {
   const { user, isAuthenticated } = useAuth();
 
-  // Si no está autenticado, mostrar login
   if (!isAuthenticated) {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack. Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack. Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
       </Stack.Navigator>
     );
   }
 
-  // Navegación según rol
   switch (user?.rol) {
-    // =============================================
-    // ADMIN
-    // =============================================
-    case 'admin':
+    case 'admin': 
       return (
         <Stack.Navigator>
           <Stack. Screen
             name="AdminHome"
             component={AdminHomeScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Historial"
+            component={HistorialScreen}
+            options={{ title: 'Historial de Multas' }}
           />
           <Stack.Screen
             name="GruasSolicitadas"
@@ -69,11 +75,11 @@ export default function AppNavigator() {
             options={{ title: 'Vehículos en Corralón' }}
           />
           <Stack.Screen
-            name="Historial"
-            component={HistorialScreen}
-            options={{ title: 'Historial de Multas' }}
+            name="DetalleVehiculoCorralon"
+            component={DetalleVehiculoCorralónScreen}
+            options={{ title: 'Detalle del Vehículo' }}
           />
-          <Stack.Screen
+          <Stack. Screen
             name="DetalleMulta"
             component={DetalleMultaScreen}
             options={{ title: 'Detalle de Multa' }}
@@ -81,9 +87,6 @@ export default function AppNavigator() {
         </Stack.Navigator>
       );
 
-    // =============================================
-    // AGENTE CORRALÓN
-    // =============================================
     case 'agente_corralon':
       return (
         <Stack.Navigator>
@@ -102,13 +105,15 @@ export default function AppNavigator() {
             component={VehiculosCorralónScreen}
             options={{ title:  'Vehículos en Corralón' }}
           />
+          <Stack.Screen
+            name="DetalleVehiculoCorralon"
+            component={DetalleVehiculoCorralónScreen}
+            options={{ title:  'Detalle del Vehículo' }}
+          />
         </Stack.Navigator>
       );
 
-    // =============================================
-    // AGENTE
-    // =============================================
-    case 'agente':
+    case 'agente': 
       return (
         <Stack.Navigator>
           <Stack.Screen
@@ -121,7 +126,7 @@ export default function AppNavigator() {
             component={LevantarMultaScreen}
             options={{ title: 'Levantar Multa' }}
           />
-          <Stack. Screen
+          <Stack.Screen
             name="SolicitarGrua"
             component={SolicitarGruaScreen}
             options={{ title: 'Solicitar Grúa' }}
@@ -132,26 +137,42 @@ export default function AppNavigator() {
             options={{ title: 'Grúas Solicitadas' }}
           />
           <Stack.Screen
-            name="Historial"
-            component={HistorialScreen}
-            options={{ title: 'Historial' }}
-          />
-          <Stack.Screen
             name="MultasOffline"
             component={MultasOfflineScreen}
             options={{ title:  'Multas Offline' }}
           />
           <Stack.Screen
             name="DetalleMulta"
-            component={DetalleMultaScreen}
-            options={{ title: 'Detalle de Multa' }}
+            component={DetalleMultaAgenteScreen}
+            options={{ title:  'Detalle de Multa' }}
           />
-        </Stack. Navigator>
+          <Stack.Screen
+            name="VerificarParquimetro"
+            component={VerificarParquimetroScreen}
+            options={{ title: 'Verificar Parquímetro' }}
+          />
+          <Stack.Screen
+            name="ScanPlaca"
+            component={ScanPlacaScreen}
+            options={{ title: 'Escanear Placa' }}
+          />
+          <Stack. Screen
+            name="MiHistorial"
+            component={MiHistorialScreen}
+            options={{ title: 'Mi Historial' }}
+          />
+          <Stack.Screen
+            name="Emergencia"
+            component={EmergenciaScreen}
+            options={{
+              title: 'Emergencia',
+              headerStyle: { backgroundColor: '#DC2626' },
+              headerTintColor:  '#fff',
+            }}
+          />
+        </Stack.Navigator>
       );
 
-    // =============================================
-    // CIUDADANO (default)
-    // =============================================
     case 'ciudadano':
     default:
       return (

@@ -7,11 +7,12 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SHADOWS } from '../config/theme';
-import Button from '../components/Button';
 
 const API_URL = 'https://multas-transito-api.onrender.com';
 
@@ -20,76 +21,123 @@ export default function RecibirVehiculoScreen({ route, navigation }) {
   const solicitudParam = route.params?. solicitud;
 
   const [loading, setLoading] = useState(false);
-  const [loadingSolicitudes, setLoadingSolicitudes] = useState(! solicitudParam);
+  const [loadingData, setLoadingData] = useState(true);
   const [solicitudes, setSolicitudes] = useState([]);
   const [solicitudSeleccionada, setSolicitudSeleccionada] = useState(solicitudParam || null);
   const [corralones, setCorralones] = useState([]);
   const [corralónSeleccionado, setCorralónSeleccionado] = useState(null);
+  const [fotos, setFotos] = useState([]);
 
   useEffect(() => {
-    if (! solicitudParam) {
-      cargarSolicitudesPendientes();
-    }
-    cargarCorralones();
+    cargarDatos();
   }, []);
 
-  const cargarSolicitudesPendientes = async () => {
+  const cargarDatos = async () => {
     try {
-      console.log('📋 Cargando solicitudes pendientes.. .');
-      const response = await fetch(`${API_URL}/api/solicitudes-grua`);
-      
-      if (!response. ok) {
-        console.error('Error HTTP:', response.status);
-        setLoadingSolicitudes(false);
-        return;
+      // Cargar solicitudes pendientes
+      if (! solicitudParam) {
+        const resSolicitudes = await fetch(`${API_URL}/api/solicitudes-grua`);
+        const dataSolicitudes = await resSolicitudes. json();
+        if (dataSolicitudes.success) {
+          const pendientes = dataSolicitudes.solicitudes.filter(
+            (s) => s.estatus === 'pendiente' || s.estatus === 'en_camino'
+          );
+          setSolicitudes(pendientes);
+        }
       }
 
-      const data = await response.json();
-      console.log('📋 Solicitudes cargadas:', data. solicitudes?. length || 0);
-
-      if (data.success) {
-        const pendientes = data.solicitudes. filter(
-          (s) => s.estatus === 'pendiente' || s.estatus === 'en_camino'
-        );
-        setSolicitudes(pendientes);
-        console.log('📋 Solicitudes pendientes:', pendientes.length);
+      // Cargar corralones
+      const resCorralones = await fetch(`${API_URL}/api/corralones`);
+      const dataCorralones = await resCorralones.json();
+      if (dataCorralones.success) {
+        setCorralones(dataCorralones.corralones);
+        if (dataCorralones.corralones. length > 0) {
+          setCorralónSeleccionado(dataCorralones.corralones[0]);
+        }
       }
     } catch (error) {
-      console.error('❌ Error cargando solicitudes:', error);
+      console.error('Error:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos');
     } finally {
-      setLoadingSolicitudes(false);
+      setLoadingData(false);
     }
   };
 
-  const cargarCorralones = async () => {
+  const tomarFoto = async () => {
     try {
-      console.log('🏢 Cargando corralones...');
-      const response = await fetch(`${API_URL}/api/corralones`);
-      
-      if (!response.ok) {
-        console. error('Error HTTP:', response.status);
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se necesita acceso a la cámara');
         return;
       }
 
-      const data = await response.json();
-      console.log('🏢 Corralones cargados:', data.corralones?. length || 0);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing:  false,
+        quality:  0.7,
+        base64: true,
+      });
 
-      if (data.success && data.corralones. length > 0) {
-        setCorralones(data. corralones);
-        setCorralónSeleccionado(data. corralones[0]);
+      if (!result.canceled && result.assets[0]) {
+        const nuevaFoto = {
+          uri: result.assets[0].uri,
+          base64: result.assets[0].base64,
+          timestamp: new Date().toISOString(),
+        };
+        setFotos([...fotos, nuevaFoto]);
       }
     } catch (error) {
-      console.error('❌ Error cargando corralones:', error);
+      console.error('Error tomando foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
     }
+  };
+
+  const seleccionarDeGaleria = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Se necesita acceso a la galería');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions. Images,
+        allowsMultipleSelection: true,
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const nuevasFotos = result. assets.map((asset) => ({
+          uri: asset.uri,
+          base64: asset.base64,
+          timestamp:  new Date().toISOString(),
+        }));
+        setFotos([...fotos, ... nuevasFotos]);
+      }
+    } catch (error) {
+      console.error('Error seleccionando foto:', error);
+    }
+  };
+
+  const eliminarFoto = (index) => {
+    Alert.alert('Eliminar foto', '¿Estás seguro? ', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          const nuevasFotos = fotos.filter((_, i) => i !== index);
+          setFotos(nuevasFotos);
+        },
+      },
+    ]);
   };
 
   const parseVehiculos = (notas) => {
     try {
-      if (!notas) return [];
-      if (typeof notas === 'object') return Array.isArray(notas) ? notas : [notas];
-      return JSON.parse(notas);
+      return JSON.parse(notas || '[]');
     } catch {
-      console.log('⚠️ No se pudo parsear notas:', notas);
       return [];
     }
   };
@@ -105,311 +153,235 @@ export default function RecibirVehiculoScreen({ route, navigation }) {
       return;
     }
 
-    Alert. alert(
-      '✅ Confirmar Recepción',
-      `¿Recibir vehículo(s) en ${corralónSeleccionado.nombre}? `,
-      [
-        { text: 'Cancelar', style: 'cancel' },
+    if (fotos.length === 0) {
+      Alert.alert(
+        '📷 Fotos requeridas',
+        'Debes tomar al menos una foto del vehículo antes de recibirlo.',
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      console.log('📥 Recibiendo vehículo.. .');
+      console.log('📥 Solicitud:', solicitudSeleccionada. id);
+      console.log('📥 Corralón:', corralónSeleccionado.id);
+      console.log('📷 Fotos:', fotos.length);
+
+      const response = await fetch(
+        `${API_URL}/api/solicitudes-grua/${solicitudSeleccionada.id}/recibir`,
         {
-          text: 'Sí, Recibir',
-          onPress:  async () => {
-            setLoading(true);
+          method: 'POST',
+          headers:  { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            corralon_id: corralónSeleccionado. id,
+            personal_id: user?. id,
+            fotos_ingreso: fotos. map((f) => f.base64),
+          }),
+        }
+      );
 
-            try {
-              console. log('📥 ========================================');
-              console. log('📥 Enviando solicitud de recepción...');
-              console.log('📥 Solicitud ID:', solicitudSeleccionada.id);
-              console. log('📥 Corralón ID:', corralónSeleccionado.id);
-              console.log('📥 Personal ID:', user?. id);
-              console.log('📥 ========================================');
+      const data = await response.json();
+      console.log('📦 Respuesta:', data);
 
-              const bodyData = {
-                corralon_id: corralónSeleccionado.id,
-                personal_id: user?.id,
-              };
-
-              console.log('📥 Body:', JSON.stringify(bodyData));
-
-              const response = await fetch(
-                `${API_URL}/api/solicitudes-grua/${solicitudSeleccionada.id}/recibir`,
-                {
-                  method:  'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON. stringify(bodyData),
-                }
-              );
-
-              console. log('📦 Response status:', response.status);
-              console.log('📦 Response ok:', response.ok);
-
-              // Verificar si la respuesta es JSON
-              const contentType = response.headers.get('content-type');
-              console.log('📦 Content-Type:', contentType);
-
-              if (!contentType || !contentType. includes('application/json')) {
-                const textResponse = await response.text();
-                console.error('❌ Respuesta no es JSON:', textResponse. substring(0, 200));
-                Alert. alert('Error', 'El servidor no respondió correctamente');
-                setLoading(false);
-                return;
-              }
-
-              const data = await response. json();
-              console.log('📦 Respuesta:', JSON.stringify(data, null, 2));
-
-              if (data.success) {
-                Alert.alert(
-                  '✅ Vehículo Recibido',
-                  `Registrado en: ${corralónSeleccionado. nombre}\n` +
-                    `Folios: ${data.folios?. join(', ') || 'Generados'}\n` +
-                    `Vehículos: ${data.registros}`,
-                  [{ text: 'OK', onPress:  () => navigation.goBack() }]
-                );
-              } else {
-                Alert.alert('Error', data.error || 'No se pudo registrar');
-              }
-            } catch (error) {
-              console.error('❌ Error completo:', error);
-              Alert.alert('Error', 'No se pudo conectar:  ' + error.message);
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+      if (data.success) {
+        Alert. alert(
+          '✅ Vehículo Recibido',
+          `El vehículo ha sido registrado en ${corralónSeleccionado.nombre}.\n\n` +
+            `Folios generados: ${data. folios?. join(', ') || 'N/A'}\n` +
+            `Fotos guardadas: ${fotos.length}`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        Alert.alert('Error', data.error || 'No se pudo recibir el vehículo');
+      }
+    } catch (error) {
+      console. error('Error:', error);
+      Alert.alert('Error', 'No se pudo conectar con el servidor');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loadingData) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Cargando... </Text>
+      </View>
+    );
+  }
 
   const vehiculos = solicitudSeleccionada
     ? parseVehiculos(solicitudSeleccionada.notas)
     : [];
 
-  if (loadingSolicitudes) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando solicitudes...</Text>
-      </View>
-    );
-  }
-
   return (
     <ScrollView style={styles. container}>
-      {/* Seleccionar Solicitud (si no viene por parámetro) */}
+      {/* Seleccionar solicitud */}
       {! solicitudParam && (
-        <View style={styles. card}>
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>
-            <Ionicons name="list" size={20} color="#7C3AED" /> Solicitudes Pendientes
+            <Ionicons name="list" size={20} color={COLORS.primary} /> Solicitudes Pendientes
           </Text>
 
           {solicitudes.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="checkmark-circle" size={50} color="#10B981" />
-              <Text style={styles.emptyTitle}>Sin pendientes</Text>
-              <Text style={styles.emptyText}>No hay solicitudes por recibir</Text>
+              <Ionicons name="checkmark-circle" size={40} color="#10B981" />
+              <Text style={styles.emptyText}>No hay solicitudes pendientes</Text>
             </View>
           ) : (
-            solicitudes.map((sol) => {
-              const vehs = parseVehiculos(sol.notas);
-              return (
-                <TouchableOpacity
-                  key={sol. id}
-                  style={[
-                    styles.solicitudItem,
-                    solicitudSeleccionada?. id === sol.id && styles.solicitudItemActivo,
-                  ]}
-                  onPress={() => setSolicitudSeleccionada(sol)}
-                >
-                  <View style={styles.solicitudInfo}>
-                    <Text style={styles. solicitudGrua}>
-                      🚛 {sol.gruas?.numero || 'Grúa'}
-                    </Text>
-                    <Text style={styles. solicitudOperador}>
-                      {sol.gruas?.operador_nombre || 'Sin operador'}
-                    </Text>
-                    <Text style={styles.solicitudUbicacion}>
-                      📍 {sol. ubicacion || 'Sin ubicación'}
-                    </Text>
-                    <Text style={styles.solicitudVehiculos}>
-                      🚗 {vehs.length} vehículo(s)
-                    </Text>
-                  </View>
-                  {solicitudSeleccionada?.id === sol. id && (
-                    <Ionicons name="checkmark-circle" size={28} color="#10B981" />
-                  )}
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-      )}
-
-      {/* Detalle de la Solicitud Seleccionada */}
-      {solicitudSeleccionada && (
-        <View style={styles. card}>
-          <Text style={styles.cardTitle}>
-            <Ionicons name="car" size={20} color="#7C3AED" /> Vehículos a Recibir
-          </Text>
-
-          {/* Info de la grúa */}
-          <View style={styles.gruaInfo}>
-            <View style={styles.gruaHeader}>
-              <Text style={styles.gruaNumero}>
-                🚛 {solicitudSeleccionada.gruas?.numero || 'Grúa'}
-              </Text>
-              <View style={styles.gruaBadge}>
-                <Ionicons name="checkmark" size={14} color="#fff" />
-                <Text style={styles. gruaBadgeText}>Llegó</Text>
-              </View>
-            </View>
-            <Text style={styles.gruaOperador}>
-              👷 {solicitudSeleccionada.gruas?.operador_nombre || 'Sin operador'}
-            </Text>
-            <Text style={styles.gruaTelefono}>
-              📞 {solicitudSeleccionada.gruas?.operador_telefono || 'Sin teléfono'}
-            </Text>
-            <Text style={styles.gruaUbicacion}>
-              📍 {solicitudSeleccionada.ubicacion || 'Sin ubicación'}
-            </Text>
-          </View>
-
-          {/* Lista de vehículos */}
-          <Text style={styles.vehiculosLabel}>
-            Vehículos ({vehiculos.length}):
-          </Text>
-          {vehiculos.length === 0 ?  (
-            <View style={styles.noVehiculos}>
-              <Ionicons name="alert-circle" size={24} color="#F59E0B" />
-              <Text style={styles.noVehiculosText}>
-                No hay vehículos registrados en esta solicitud
-              </Text>
-            </View>
-          ) : (
-            vehiculos.map((v, i) => (
-              <View key={i} style={styles. vehiculoCard}>
-                <View style={styles.vehiculoHeader}>
-                  <Text style={styles. vehiculoPlaca}>{v.placa || 'Sin placa'}</Text>
-                  <View style={styles.vehiculoNumero}>
-                    <Text style={styles.vehiculoNumeroText}>{i + 1}</Text>
-                  </View>
-                </View>
-                <View style={styles.vehiculoDetalles}>
-                  <Text style={styles.vehiculoInfo}>
-                    <Ionicons name="car" size={14} color="#6B7280" /> {v.marca || 'N/A'}
+            solicitudes.map((solicitud) => (
+              <TouchableOpacity
+                key={solicitud. id}
+                style={[
+                  styles.solicitudItem,
+                  solicitudSeleccionada?. id === solicitud. id && styles.solicitudSeleccionada,
+                ]}
+                onPress={() => setSolicitudSeleccionada(solicitud)}
+              >
+                <View style={styles.solicitudInfo}>
+                  <Text style={styles. solicitudGrua}>
+                    🚛 {solicitud. gruas?.numero || 'Grúa'}
                   </Text>
-                  <Text style={styles.vehiculoInfo}>
-                    <Ionicons name="color-palette" size={14} color="#6B7280" /> {v.color || 'N/A'}
+                  <Text style={styles. solicitudUbicacion}>
+                    📍 {solicitud.ubicacion}
                   </Text>
                 </View>
-                <View style={styles. vehiculoMotivo}>
-                  <Ionicons name="alert-circle" size={14} color="#F59E0B" />
-                  <Text style={styles.vehiculoMotivoText}>{v.motivo || 'Sin motivo'}</Text>
-                </View>
-              </View>
+                {solicitudSeleccionada?. id === solicitud. id && (
+                  <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                )}
+              </TouchableOpacity>
             ))
           )}
         </View>
       )}
 
-      {/* Seleccionar Corralón */}
+      {/* Información de la solicitud seleccionada */}
       {solicitudSeleccionada && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
-            <Ionicons name="business" size={20} color="#7C3AED" /> Seleccionar Corralón
+            <Ionicons name="car" size={20} color={COLORS. primary} /> Vehículos a Recibir
           </Text>
 
-          {corralones.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="alert-circle" size={40} color="#F59E0B" />
-              <Text style={styles.emptyText}>No hay corralones disponibles</Text>
+          {vehiculos.map((vehiculo, index) => (
+            <View key={index} style={styles. vehiculoItem}>
+              <Text style={styles.vehiculoPlaca}>🚗 {vehiculo.placa}</Text>
+              <Text style={styles. vehiculoInfo}>
+                {vehiculo.marca} • {vehiculo.color}
+              </Text>
+              <Text style={styles.vehiculoMotivo}>📋 {vehiculo.motivo}</Text>
             </View>
-          ) : (
-            corralones.map((corralon) => {
-              const porcentaje = corralon.capacidad
-                ? Math.round(((corralon.vehiculos_actuales || 0) / corralon.capacidad) * 100)
-                : 0;
-              const lleno = porcentaje >= 90;
+          ))}
+        </View>
+      )}
 
-              return (
-                <TouchableOpacity
-                  key={corralon.id}
-                  style={[
-                    styles.corralónItem,
-                    corralónSeleccionado?.id === corralon.id && styles.corralónItemActivo,
-                    lleno && styles. corralónLleno,
-                  ]}
-                  onPress={() => ! lleno && setCorralónSeleccionado(corralon)}
-                  disabled={lleno}
-                >
-                  <View style={styles.corralónInfo}>
-                    <Text style={styles.corralónNombre}>{corralon. nombre}</Text>
-                    <Text style={styles.corralónDireccion}>
-                      📍 {corralon. direccion}
-                    </Text>
-                    <View style={styles.capacidadContainer}>
-                      <View style={styles.capacidadBar}>
-                        <View
-                          style={[
-                            styles. capacidadFill,
-                            { width: `${Math.min(porcentaje, 100)}%` },
-                            porcentaje > 70 && styles.capacidadAlta,
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles. capacidadText}>
-                        {corralon.vehiculos_actuales || 0} / {corralon.capacidad}
-                      </Text>
-                    </View>
-                    {lleno && (
-                      <Text style={styles.llenoText}>⚠️ Corralón lleno</Text>
-                    )}
-                  </View>
-                  {corralónSeleccionado?.id === corralon.id && ! lleno && (
-                    <Ionicons name="checkmark-circle" size={28} color="#10B981" />
-                  )}
-                </TouchableOpacity>
-              );
-            })
+      {/* Seleccionar corralón */}
+      <View style={styles. card}>
+        <Text style={styles. cardTitle}>
+          <Ionicons name="business" size={20} color={COLORS. primary} /> Seleccionar Corralón
+        </Text>
+
+        {corralones.map((corralon) => (
+          <TouchableOpacity
+            key={corralon.id}
+            style={[
+              styles. corralónItem,
+              corralónSeleccionado?.id === corralon.id && styles.corralónSeleccionado,
+            ]}
+            onPress={() => setCorralónSeleccionado(corralon)}
+          >
+            <View style={styles.corralónInfo}>
+              <Text style={styles.corralónNombre}>{corralon. nombre}</Text>
+              <Text style={styles.corralónDireccion}>{corralon. direccion}</Text>
+              <Text style={styles.corralónCapacidad}>
+                🚗 {corralon.vehiculos_actuales || 0} / {corralon.capacidad || 100}
+              </Text>
+            </View>
+            {corralónSeleccionado?.id === corralon.id && (
+              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Fotos del vehículo */}
+      <View style={styles. card}>
+        <Text style={styles. cardTitle}>
+          <Ionicons name="camera" size={20} color={COLORS. primary} /> Fotos del Vehículo *
+        </Text>
+        <Text style={styles.cardSubtitle}>
+          Toma fotos del estado actual del vehículo al recibirlo
+        </Text>
+
+        <View style={styles.fotosContainer}>
+          {fotos.map((foto, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.fotoWrapper}
+              onPress={() => eliminarFoto(index)}
+            >
+              <Image source={{ uri: foto. uri }} style={styles.fotoPreview} />
+              <View style={styles.fotoDeleteBadge}>
+                <Ionicons name="close" size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          {fotos. length < 10 && (
+            <View style={styles.botonesfotos}>
+              <TouchableOpacity style={styles.agregarFotoBtn} onPress={tomarFoto}>
+                <Ionicons name="camera" size={30} color={COLORS.primary} />
+                <Text style={styles.agregarFotoText}>Cámara</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles. agregarFotoBtn} onPress={seleccionarDeGaleria}>
+                <Ionicons name="images" size={30} color={COLORS. primary} />
+                <Text style={styles.agregarFotoText}>Galería</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
-      )}
 
-      {/* Resumen */}
-      {solicitudSeleccionada && corralónSeleccionado && (
-        <View style={styles.resumenCard}>
-          <Text style={styles. resumenTitle}>📋 Resumen</Text>
-          <View style={styles.resumenRow}>
-            <Text style={styles.resumenLabel}>Grúa:</Text>
-            <Text style={styles.resumenValue}>
-              {solicitudSeleccionada. gruas?.numero || 'N/A'}
+        {fotos.length > 0 && (
+          <Text style={styles.fotosCount}>
+            📷 {fotos.length} foto{fotos.length !== 1 ? 's' : ''} tomada{fotos.length !== 1 ? 's' : ''}
+          </Text>
+        )}
+
+        {fotos.length === 0 && (
+          <View style={styles.alertaFotos}>
+            <Ionicons name="warning" size={20} color="#F59E0B" />
+            <Text style={styles.alertaFotosText}>
+              Debes tomar al menos una foto del vehículo
             </Text>
           </View>
-          <View style={styles.resumenRow}>
-            <Text style={styles.resumenLabel}>Vehículos:</Text>
-            <Text style={styles.resumenValue}>{vehiculos.length}</Text>
-          </View>
-          <View style={styles.resumenRow}>
-            <Text style={styles.resumenLabel}>Corralón:</Text>
-            <Text style={styles.resumenValue}>{corralónSeleccionado. nombre}</Text>
-          </View>
-          <View style={styles.resumenRow}>
-            <Text style={styles.resumenLabel}>Recibe:</Text>
-            <Text style={styles.resumenValue}>{user?.nombre || 'N/A'}</Text>
-          </View>
-        </View>
-      )}
+        )}
+      </View>
 
-      {/* Botón Recibir */}
-      {solicitudSeleccionada && corralónSeleccionado && (
-        <View style={styles.buttonContainer}>
-          <Button
-            title={`Recibir ${vehiculos.length} Vehículo(s)`}
-            onPress={recibirVehiculo}
-            loading={loading}
-            icon={<Ionicons name="checkmark-circle" size={20} color="#fff" />}
-          />
-        </View>
-      )}
+      {/* Botón recibir */}
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[
+            styles. recibirBtn,
+            (! solicitudSeleccionada || ! corralónSeleccionado || fotos.length === 0) &&
+              styles. recibirBtnDisabled,
+          ]}
+          onPress={recibirVehiculo}
+          disabled={loading || !solicitudSeleccionada || ! corralónSeleccionado || fotos.length === 0}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="download" size={24} color="#fff" />
+              <Text style={styles.recibirBtnText}>Recibir Vehículo</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
 
       <View style={{ height: 30 }} />
     </ScrollView>
@@ -417,136 +389,132 @@ export default function RecibirVehiculoScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems:  'center' },
+  container:  { flex: 1, backgroundColor: '#F3F4F6' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#6B7280' },
   card: {
     backgroundColor: '#fff',
     margin: 15,
     marginBottom: 0,
     borderRadius: 12,
-    padding:  15,
+    padding: 15,
     ... SHADOWS. small,
   },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
-  emptyState: { alignItems: 'center', padding: 30 },
-  emptyTitle: { fontSize: 16, fontWeight: 'bold', color:  '#1F2937', marginTop: 10 },
-  emptyText: { color: '#6B7280', marginTop: 5, textAlign: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 10 },
+  cardSubtitle: { fontSize: 13, color: '#6B7280', marginBottom: 15 },
+  emptyState: { alignItems: 'center', padding: 20 },
+  emptyText: { color: '#6B7280', marginTop: 10 },
   solicitudItem: {
-    flexDirection:  'row',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
     backgroundColor: '#F9FAFB',
-    marginBottom: 10,
+    marginBottom: 8,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  solicitudItemActivo: { borderColor: '#10B981', backgroundColor: '#ECFDF5' },
+  solicitudSeleccionada: { borderColor: '#10B981', backgroundColor: '#ECFDF5' },
   solicitudInfo: { flex: 1 },
-  solicitudGrua:  { fontSize: 16, fontWeight: 'bold', color:  '#1F2937' },
-  solicitudOperador: { color: '#4B5563', marginTop: 2 },
-  solicitudUbicacion: { color: '#6B7280', fontSize: 13, marginTop: 5 },
-  solicitudVehiculos:  { color: '#3B82F6', fontSize: 13, marginTop: 5, fontWeight: '600' },
-  gruaInfo: {
-    backgroundColor: '#EEF2FF',
-    padding:  15,
-    borderRadius: 10,
-    marginBottom: 15,
-  },
-  gruaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  gruaNumero: { fontSize: 18, fontWeight: 'bold', color:  '#4F46E5' },
-  gruaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal:  10,
-    paddingVertical:  4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  gruaBadgeText:  { color: '#fff', fontSize: 12, fontWeight: '600' },
-  gruaOperador: { color: '#6366F1', marginTop: 8 },
-  gruaTelefono:  { color: '#6366F1' },
-  gruaUbicacion:  { color: '#6B7280', marginTop: 5 },
-  vehiculosLabel: { fontSize:  14, fontWeight: '600', color: '#4B5563', marginBottom: 10 },
-  noVehiculos: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    padding: 15,
-    borderRadius: 10,
-    gap: 10,
-  },
-  noVehiculosText: { color: '#92400E', flex: 1 },
-  vehiculoCard: {
+  solicitudGrua: { fontSize: 16, fontWeight: 'bold', color:  '#1F2937' },
+  solicitudUbicacion: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  vehiculoItem: {
     backgroundColor: '#F0F9FF',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    borderLeftWidth: 4,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
     borderLeftColor: '#3B82F6',
   },
-  vehiculoHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  vehiculoPlaca: { fontSize: 20, fontWeight: 'bold', color:  '#1E40AF' },
-  vehiculoNumero: {
-    backgroundColor: '#3B82F6',
-    width: 28,
-    height:  28,
-    borderRadius: 14,
+  vehiculoPlaca: { fontSize: 16, fontWeight: 'bold', color:  '#1E40AF' },
+  vehiculoInfo: { fontSize: 13, color: '#4B5563', marginTop: 2 },
+  vehiculoMotivo:  { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  corralónItem: {
+    flexDirection:  'row',
+    justifyContent:  'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 8,
+    borderWidth:  2,
+    borderColor: 'transparent',
+  },
+  corralónSeleccionado: { borderColor: '#10B981', backgroundColor:  '#ECFDF5' },
+  corralónInfo:  { flex: 1 },
+  corralónNombre:  { fontSize: 16, fontWeight: 'bold', color:  '#1F2937' },
+  corralónDireccion: { fontSize:  13, color:  '#6B7280', marginTop: 2 },
+  corralónCapacidad: { fontSize:  12, color: '#3B82F6', marginTop: 4 },
+  
+  // Estilos para fotos
+  fotosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  fotoWrapper: {
+    position: 'relative',
+  },
+  fotoPreview: {
+    width: 80,
+    height:  80,
+    borderRadius: 8,
+  },
+  fotoDeleteBadge:  {
+    position:  'absolute',
+    top: -5,
+    right:  -5,
+    backgroundColor: '#EF4444',
+    width: 22,
+    height:  22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  vehiculoNumeroText: { color: '#fff', fontWeight: 'bold' },
-  vehiculoDetalles: { flexDirection: 'row', marginTop: 10, gap: 20 },
-  vehiculoInfo: { color: '#4B5563', fontSize: 14 },
-  vehiculoMotivo: {
+  botonesfotos: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop:  10,
-    backgroundColor: '#FEF3C7',
-    padding: 8,
-    borderRadius: 6,
-    gap: 6,
+    gap: 10,
   },
-  vehiculoMotivoText: { color: '#92400E', fontSize:  13 },
-  corralónItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding:  15,
-    borderRadius: 10,
-    backgroundColor:  '#F9FAFB',
-    marginBottom: 10,
+  agregarFotoBtn:  {
+    width: 80,
+    height:  80,
+    borderRadius: 8,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor:  COLORS.primary,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4FF',
   },
-  corralónItemActivo: { borderColor: '#10B981', backgroundColor: '#ECFDF5' },
-  corralónLleno: { opacity: 0.6, backgroundColor: '#FEE2E2' },
-  corralónInfo: { flex: 1 },
-  corralónNombre: { fontSize: 16, fontWeight:  'bold', color: '#1F2937' },
-  corralónDireccion: { color: '#6B7280', fontSize:  13, marginTop: 5 },
-  capacidadContainer: { flexDirection: 'row', alignItems:  'center', marginTop: 10, gap: 10 },
-  capacidadBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius:  4,
-    overflow: 'hidden',
+  agregarFotoText: { fontSize: 11, color: COLORS.primary, marginTop: 4 },
+  fotosCount: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#059669',
+    fontWeight: '600',
   },
-  capacidadFill: { height: '100%', backgroundColor:  '#10B981', borderRadius: 4 },
-  capacidadAlta:  { backgroundColor: '#F59E0B' },
-  capacidadText: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
-  llenoText: { color: '#EF4444', fontSize: 12, marginTop: 5, fontWeight: '600' },
-  resumenCard: {
-    backgroundColor: '#EEF2FF',
-    margin: 15,
-    marginBottom: 0,
+  alertaFotos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 8,
+  },
+  alertaFotosText: { color: '#92400E', fontSize: 13, flex: 1 },
+  
+  buttonContainer: { padding: 15 },
+  recibirBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    padding: 16,
     borderRadius: 12,
-    padding: 15,
+    gap: 10,
   },
-  resumenTitle: { fontSize:  16, fontWeight: 'bold', color: '#4F46E5', marginBottom: 10 },
-  resumenRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  resumenLabel: { color: '#6366F1' },
-  resumenValue: { fontWeight: '600', color: '#4F46E5' },
-  buttonContainer:  { padding: 15 },
-});
+  recibirBtnDisabled: { backgroundColor:'#9CA3AF' },
+  recibirBtnText: { color: '#fff', fontSize: 18, fontWeight:'bold' },
+}); 

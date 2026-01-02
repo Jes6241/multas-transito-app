@@ -36,7 +36,7 @@ export default function VehiculosCorralónScreen({ navigation }) {
       const response = await fetch(`${API_URL}/api/corralon`);
       const data = await response.json();
 
-      if (data.success) {
+      if (data. success) {
         setVehiculos(data.vehiculos || []);
       }
     } catch (error) {
@@ -48,47 +48,18 @@ export default function VehiculosCorralónScreen({ navigation }) {
     }
   };
 
-  const liberarVehiculo = async (vehiculo) => {
-    Alert.alert(
-      '🚗 Liberar Vehículo',
-      `¿Liberar el vehículo con folio ${vehiculo.folio_remision}?`,
-      [
-        { text:  'Cancelar', style: 'cancel' },
-        {
-          text: 'Sí, Liberar',
-          onPress: async () => {
-            try {
-              const response = await fetch(
-                `${API_URL}/api/corralon/${vehiculo.id}/liberar`,
-                { method: 'PATCH' }
-              );
-              const data = await response.json();
-
-              if (data. success) {
-                Alert.alert('✅ Liberado', 'El vehículo ha sido liberado');
-                cargarVehiculos();
-              } else {
-                Alert.alert('Error', data.error || 'No se pudo liberar');
-              }
-            } catch (error) {
-              Alert. alert('Error', 'No se pudo conectar con el servidor');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const getEstatusInfo = (estatus) => {
     switch (estatus) {
-      case 'retenido':
-        return { color: '#F59E0B', bg: '#FEF3C7', icon: 'lock-closed', texto: 'Retenido' };
+      case 'ingresado':
+        return { color: '#F59E0B', bg: '#FEF3C7', icon: 'enter', texto: 'Ingresado' };
+      case 'pendiente_pago':
+        return { color: '#3B82F6', bg: '#DBEAFE', icon:  'card', texto: 'Pendiente Pago' };
+      case 'listo_liberar': 
+        return { color: '#10B981', bg: '#D1FAE5', icon: 'checkmark-circle', texto: 'Listo Liberar' };
       case 'liberado':
-        return { color: '#10B981', bg:  '#D1FAE5', icon:  'lock-open', texto: 'Liberado' };
-      case 'en_proceso':
-        return { color: '#3B82F6', bg: '#DBEAFE', icon:  'time', texto: 'En Proceso' };
-      default:
-        return { color: '#6B7280', bg:  '#F3F4F6', icon: 'help', texto: estatus || 'Desconocido' };
+        return { color: '#6B7280', bg: '#E5E7EB', icon: 'exit', texto: 'Liberado' };
+      default: 
+        return { color:  '#6B7280', bg: '#F3F4F6', icon: 'help', texto: estatus || 'Desconocido' };
     }
   };
 
@@ -100,14 +71,18 @@ export default function VehiculosCorralónScreen({ navigation }) {
     return diff;
   };
 
+  // ARREGLADO:  El filtro "retenidos" ahora busca 'ingresado', 'pendiente_pago', 'listo_liberar'
   const vehiculosFiltrados = vehiculos.filter((v) => {
     // Filtro por estatus
-    if (filtro === 'retenidos' && v.estatus !== 'retenido') return false;
-    if (filtro === 'liberados' && v. estatus !== 'liberado') return false;
+    if (filtro === 'retenidos') {
+      // Todos los que NO están liberados
+      if (v.estatus === 'liberado') return false;
+    }
+    if (filtro === 'liberados' && v.estatus !== 'liberado') return false;
 
     // Filtro por búsqueda
     if (busqueda) {
-      const busquedaLower = busqueda.toLowerCase();
+      const busquedaLower = busqueda. toLowerCase();
       return (
         v.folio_remision?. toLowerCase().includes(busquedaLower) ||
         v.tarjeton_resguardo?.toLowerCase().includes(busquedaLower) ||
@@ -118,21 +93,25 @@ export default function VehiculosCorralónScreen({ navigation }) {
     return true;
   });
 
-  const retenidos = vehiculos.filter((v) => v.estatus === 'retenido').length;
+  // ARREGLADO: Contar todos los que NO están liberados
+  const retenidos = vehiculos.filter((v) => v.estatus !== 'liberado').length;
   const liberados = vehiculos.filter((v) => v.estatus === 'liberado').length;
 
   const renderVehiculo = ({ item }) => {
     const estatusInfo = getEstatusInfo(item.estatus);
     const diasRetenido = calcularDiasRetenido(item.fecha_ingreso);
-    const esRetenido = item.estatus === 'retenido';
+    const noLiberado = item. estatus !== 'liberado';
 
     return (
-      <View style={[styles.vehiculoCard, esRetenido && styles.vehiculoRetenido]}>
+      <TouchableOpacity
+        style={[styles.vehiculoCard, noLiberado && styles.vehiculoRetenido]}
+        onPress={() => navigation.navigate('DetalleVehiculoCorralon', { vehiculo: item })}
+      >
         {/* Header */}
         <View style={styles. vehiculoHeader}>
           <View>
-            <Text style={styles.folioRemision}>{item.folio_remision}</Text>
-            <Text style={styles. tarjeton}>🏷️ {item. tarjeton_resguardo}</Text>
+            <Text style={styles.folioRemision}>{item. folio_remision}</Text>
+            <Text style={styles.tarjeton}>🏷️ {item. tarjeton_resguardo}</Text>
           </View>
           <View style={[styles.estatusBadge, { backgroundColor: estatusInfo.bg }]}>
             <Ionicons name={estatusInfo.icon} size={14} color={estatusInfo.color} />
@@ -173,16 +152,16 @@ export default function VehiculosCorralónScreen({ navigation }) {
         </View>
 
         {/* Días retenido */}
-        {esRetenido && (
+        {noLiberado && (
           <View style={styles.diasContainer}>
             <View style={[styles.diasBadge, diasRetenido > 30 && styles.diasAlerta]}>
               <Ionicons
                 name="time"
                 size={16}
-                color={diasRetenido > 30 ?  '#EF4444' :  '#F59E0B'}
+                color={diasRetenido > 30 ? '#EF4444' :  '#F59E0B'}
               />
               <Text
-                style={[styles.diasText, diasRetenido > 30 && styles.diasTextAlerta]}
+                style={[styles.diasText, diasRetenido > 30 && styles. diasTextAlerta]}
               >
                 {diasRetenido} día{diasRetenido !== 1 ? 's' : ''} retenido
               </Text>
@@ -190,17 +169,11 @@ export default function VehiculosCorralónScreen({ navigation }) {
           </View>
         )}
 
-        {/* Botón liberar */}
-        {esRetenido && (
-          <TouchableOpacity
-            style={styles.liberarBtn}
-            onPress={() => liberarVehiculo(item)}
-          >
-            <Ionicons name="lock-open" size={18} color="#fff" />
-            <Text style={styles.liberarBtnText}>Liberar Vehículo</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Indicador de toque */}
+        <View style={styles. verDetalleContainer}>
+          <Text style={styles. verDetalleText}>Ver detalle y liberar →</Text>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -208,7 +181,7 @@ export default function VehiculosCorralónScreen({ navigation }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando vehículos...</Text>
+        <Text style={styles. loadingText}>Cargando vehículos...</Text>
       </View>
     );
   }
@@ -235,7 +208,7 @@ export default function VehiculosCorralónScreen({ navigation }) {
       </View>
 
       {/* Búsqueda */}
-      <View style={styles. searchContainer}>
+      <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
@@ -254,9 +227,9 @@ export default function VehiculosCorralónScreen({ navigation }) {
       {/* Filtros */}
       <View style={styles.filtros}>
         {[
-          { key: 'todos', label: 'Todos' },
-          { key: 'retenidos', label: 'Retenidos' },
-          { key:  'liberados', label: 'Liberados' },
+          { key:  'todos', label: 'Todos' },
+          { key: 'retenidos', label:  'Retenidos' },
+          { key: 'liberados', label:  'Liberados' },
         ].map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -277,7 +250,7 @@ export default function VehiculosCorralónScreen({ navigation }) {
         data={vehiculosFiltrados}
         renderItem={renderVehiculo}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles. lista}
+        contentContainerStyle={styles.lista}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={cargarVehiculos} />
         }
@@ -298,8 +271,8 @@ export default function VehiculosCorralónScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#F3F4F6' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems:  'center' },
   loadingText: { marginTop: 10, color: '#6B7280' },
   resumenContainer: { flexDirection: 'row', padding: 15, gap: 10 },
   resumenCard: {
@@ -309,7 +282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ... SHADOWS.small,
   },
-  resumenNumero: { fontSize: 24, fontWeight: 'bold', color:  '#1F2937', marginTop: 5 },
+  resumenNumero: { fontSize: 24, fontWeight:  'bold', color: '#1F2937', marginTop: 5 },
   resumenLabel: { fontSize: 11, color: '#6B7280' },
   searchContainer: {
     flexDirection:  'row',
@@ -317,23 +290,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginHorizontal: 15,
     marginBottom: 10,
-    paddingHorizontal:  15,
+    paddingHorizontal: 15,
     borderRadius: 10,
     ... SHADOWS.small,
   },
-  searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal: 10, fontSize: 14 },
+  searchInput: { flex: 1, paddingVertical: 12, paddingHorizontal:  10, fontSize: 14 },
   filtros: { flexDirection: 'row', paddingHorizontal: 15, marginBottom: 10, gap: 8 },
   filtroBtn: {
     paddingHorizontal:  16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#fff',
+    backgroundColor:  '#fff',
     ... SHADOWS.small,
   },
   filtroBtnActivo:  { backgroundColor: '#7C3AED' },
   filtroText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
   filtroTextActivo:  { color: '#fff', fontWeight: '600' },
-  lista: { padding: 15, paddingTop: 5, paddingBottom: 30 },
+  lista:  { padding: 15, paddingTop: 5, paddingBottom:  30 },
   vehiculoCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -343,32 +316,32 @@ const styles = StyleSheet.create({
   },
   vehiculoRetenido: {
     borderLeftWidth: 4,
-    borderLeftColor:  '#F59E0B',
+    borderLeftColor: '#F59E0B',
   },
   vehiculoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems:  'flex-start',
+    flexDirection:  'row',
+    justifyContent:  'space-between',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   folioRemision: { fontSize: 16, fontWeight: 'bold', color:  '#1E40AF' },
-  tarjeton: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  tarjeton:  { fontSize: 13, color: '#6B7280', marginTop: 2 },
   estatusBadge:  {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal:  10,
     paddingVertical:  5,
     borderRadius: 12,
-    gap: 5,
+    gap:  5,
   },
-  estatusText:  { fontSize: 12, fontWeight: '600' },
+  estatusText: { fontSize: 12, fontWeight: '600' },
   infoContainer: {
     backgroundColor: '#F9FAFB',
-    padding: 12,
+    padding:  12,
     borderRadius: 8,
     marginBottom: 12,
   },
-  infoRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  infoRow:  { flexDirection: 'row', alignItems:  'center', gap: 8, marginBottom: 6 },
   infoText: { fontSize: 13, color: '#4B5563', flex: 1 },
   diasContainer: { marginBottom: 12 },
   diasBadge: {
@@ -376,28 +349,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: '#FEF3C7',
-    paddingHorizontal:  12,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     gap:  6,
   },
   diasAlerta: { backgroundColor: '#FEE2E2' },
-  diasText:  { color: '#92400E', fontSize: 13, fontWeight: '600' },
-  diasTextAlerta:  { color: '#B91C1C' },
-  liberarBtn: {
-    flexDirection: 'row',
+  diasText:  { color: '#92400E', fontSize:  13, fontWeight: '600' },
+  diasTextAlerta: { color: '#B91C1C' },
+  verDetalleContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop:  12,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    padding: 12,
-    borderRadius: 8,
-    gap:  8,
   },
-  liberarBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  verDetalleText: { color: '#7C3AED', fontWeight: '600', fontSize: 14 },
   emptyState: {
     alignItems: 'center',
     padding: 40,
-    backgroundColor: '#fff',
+    backgroundColor:  '#fff',
     borderRadius: 12,
     ... SHADOWS.small,
   },
