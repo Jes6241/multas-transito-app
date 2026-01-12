@@ -43,6 +43,7 @@ export const offlineService = {
         placa: multa. placa,
         tipo_infraccion: multa.tipo_infraccion,
         descripcion: multa. descripcion || multa.tipo_infraccion,
+        fundamento_legal: multa.fundamento_legal || null, // Agregar fundamento legal
         monto: multa. monto || 0,
         monto_final: multa.monto_final || multa.monto || 0,
 
@@ -56,6 +57,10 @@ export const offlineService = {
 
         // Folio (se mantiene el mismo)
         folio: folio,
+        
+        // Línea de captura y vencimiento
+        linea_captura: multa.linea_captura || 'PENDIENTE',
+        fecha_vencimiento: multa.fecha_vencimiento || null,
 
         // FIRMAS - IMPORTANTE
         firma_agente: multa. firma_agente || null,
@@ -156,6 +161,7 @@ export const offlineService = {
               placa: multa.placa,
               tipo_infraccion:  multa.tipo_infraccion,
               descripcion: multa.descripcion,
+              fundamento_legal: multa.fundamento_legal, // Agregar fundamento legal
               monto:  multa.monto,
               monto_final: multa.monto_final,
 
@@ -167,8 +173,12 @@ export const offlineService = {
               // Agente
               agente_id: multa.agente_id,
 
-              // Folio (el mismo que se generó offline)
+              // Folio (el mismo que se generó offline - NO debe cambiar)
               folio: multa.folio,
+              
+              // Línea de captura (el servidor puede generar una nueva)
+              linea_captura: multa.linea_captura,
+              fecha_vencimiento: multa.fecha_vencimiento,
 
               // FIRMAS
               firma_agente: multa.firma_agente,
@@ -176,29 +186,52 @@ export const offlineService = {
 
               // Fotos
               fotos: multa.fotos || [],
+              
+              // Indicar que viene de sincronización offline
+              esOfflineSincronizado: true,
             }),
             signal:  controller.signal,
           });
 
           clearTimeout(timeoutId);
 
-          const data = await response.json();
+          let data;
+          try {
+            data = await response.json();
+          } catch (parseError) {
+            data = { error: `Error parseando respuesta (status: ${response.status})` };
+          }
 
-          if (response. ok && data.success) {
+          if (response.ok && data.success) {
             await offlineService.eliminarMultaOffline(multa.id_temporal);
-            console.log(`✅ Multa ${multa.placa} sincronizada - Folio: ${data.multa?. folio}`);
+            console.log(`✅ Multa ${multa.placa} sincronizada - Folio: ${data.multa?.folio}`);
             resultados.push({
               success: true,
               placa: multa.placa,
-              folio:  data.multa?. folio,
+              folio: data.multa?.folio,
             });
           } else {
-            console. log(`❌ Error sincronizando ${multa.placa}: `, data.error);
-            resultados. push({
-              success: false,
-              placa: multa.placa,
-              error: data.error,
-            });
+            const errorMsg = data.error || data.message || `Error del servidor (status: ${response.status})`;
+            
+            // Si el error es de folio duplicado, la multa ya está en el servidor
+            // Eliminarla del almacenamiento local y considerarla exitosa
+            if (errorMsg.includes('duplicate key') || errorMsg.includes('folio_key') || errorMsg.includes('ya existe')) {
+              await offlineService.eliminarMultaOffline(multa.id_temporal);
+              console.log(`✅ Multa ${multa.placa} ya existía en servidor - eliminada de local`);
+              resultados.push({
+                success: true,
+                placa: multa.placa,
+                folio: multa.folio,
+                nota: 'Ya sincronizada previamente',
+              });
+            } else {
+              console.log(`❌ Error sincronizando ${multa.placa}:`, errorMsg);
+              resultados.push({
+                success: false,
+                placa: multa.placa,
+                error: errorMsg,
+              });
+            }
           }
         } catch (error) {
           console.error(`❌ Error de red sincronizando ${multa.placa}:`, error.message);
@@ -217,12 +250,20 @@ export const offlineService = {
 
       return {
         success: fallidas === 0,
-        message: `Sincronizadas:  ${exitosas}, Errores: ${fallidas}`,
+        message: `Sincronizadas: ${exitosas}, Errores: ${fallidas}`,
         resultados,
       };
     } catch (error) {
-      console. error('❌ Error en sincronización:', error);
-      return { success: false, message: error.message, resultados: [] };
+      console.error('❌ Error en sincronización:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Error desconocido en sincronización', 
+        resultados: [{
+          success: false,
+          placa: 'General',
+          error: error.message || 'Error de conexión o almacenamiento'
+        }] 
+      };
     }
   },
 
