@@ -38,35 +38,43 @@ export default function CorralónHomeScreen({ navigation }) {
     try {
       // Cargar solicitudes pendientes
       const resSolicitudes = await fetch(`${API_URL}/api/solicitudes-grua`);
-      const dataSolicitudes = await resSolicitudes. json();
+      const dataSolicitudes = await resSolicitudes.json();
 
       if (dataSolicitudes.success) {
-        const pendientes = dataSolicitudes.solicitudes.filter(
+        const solicitudes = dataSolicitudes.solicitudes || [];
+        const pendientes = solicitudes.filter(
           (s) => s.estatus === 'pendiente' || s.estatus === 'en_camino'
         );
         setSolicitudesPendientes(pendientes);
         setStats((prev) => ({ ...prev, pendientes: pendientes.length }));
+      } else {
+        setSolicitudesPendientes([]);
+        setStats((prev) => ({ ...prev, pendientes: 0 }));
       }
 
       // Cargar vehículos en corralón
       const resCorralon = await fetch(`${API_URL}/api/corralon`);
-      const dataCorralon = await resCorralon. json();
+      const dataCorralon = await resCorralon.json();
 
       if (dataCorralon.success) {
-        // ARREGLADO:  Buscar 'ingresado', 'pendiente_pago', 'listo_liberar' 
-        const enCorralon = dataCorralon.vehiculos.filter(
-          (v) => v.estatus === 'ingresado' || v.estatus === 'pendiente_pago' || v. estatus === 'listo_liberar'
+        const vehiculos = dataCorralon.vehiculos || [];
+        const enCorralon = vehiculos.filter(
+          (v) => v.estatus === 'ingresado' || v.estatus === 'pendiente_pago' || v.estatus === 'listo_liberar'
         ).length;
         
-        const hoy = dataCorralon.vehiculos.filter((v) => {
+        const hoy = vehiculos.filter((v) => {
           const fecha = new Date(v.fecha_ingreso).toDateString();
           return fecha === new Date().toDateString();
         }).length;
 
         setStats((prev) => ({ ...prev, enCorralon, hoy }));
+      } else {
+        setStats((prev) => ({ ...prev, enCorralon: 0, hoy: 0 }));
       }
     } catch (error) {
       console.error('Error:', error);
+      setSolicitudesPendientes([]);
+      setStats({ pendientes: 0, enCorralon: 0, hoy: 0 });
     } finally {
       setRefreshing(false);
     }

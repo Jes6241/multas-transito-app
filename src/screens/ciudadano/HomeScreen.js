@@ -193,6 +193,45 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* ===== SECCIÓN INFORMACIÓN ===== */}
+      <Text style={styles.sectionTitle}>📚 Información</Text>
+      <Text style={styles.sectionSubtitle}>Consultas y servicios adicionales</Text>
+
+      <View style={styles.menuGrid}>
+        <TouchableOpacity
+          style={styles.menuCard}
+          onPress={() => navigation.navigate('DescuentosInfo')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#D1FAE5' }]}>
+            <Ionicons name="pricetags" size={32} color="#059669" />
+          </View>
+          <Text style={styles.menuTitle}>Descuentos</Text>
+          <Text style={styles.menuDesc}>Pronto pago y más</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuCard}
+          onPress={() => navigation.navigate('ConsultaCorralon')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#FEE2E2' }]}>
+            <Ionicons name="location" size={32} color="#DC2626" />
+          </View>
+          <Text style={styles.menuTitle}>Corralón</Text>
+          <Text style={styles.menuDesc}>¿Dónde está mi auto?</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuCard}
+          onPress={() => navigation.navigate('ReportarError')}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#FEF3C7' }]}>
+            <Ionicons name="flag" size={32} color="#D97706" />
+          </View>
+          <Text style={styles.menuTitle}>Reportar Error</Text>
+          <Text style={styles.menuDesc}>Aclarar multa</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Información de ayuda */}
       <View style={styles.infoCard}>
         <Ionicons name="information-circle" size={28} color="#3B82F6" />

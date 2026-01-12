@@ -1,6 +1,6 @@
-const API_URL = 'https://multas-transito-api.onrender.com';
-const TESORERIA_URL = 'https://lineas-captura-api.onrender.com';
-const PARQUIMETROS_URL = 'https://parquimetros-api-u592.onrender.com';
+export const API_URL = 'https://multas-transito-api.onrender.com';
+export const TESORERIA_URL = 'https://lineas-captura-api.onrender.com';
+export const PARQUIMETROS_URL = 'https://parquimetros-api-u592.onrender.com';
 
 export const API = {
   LOGIN: `${API_URL}/api/auth/login`,
@@ -149,5 +149,4 @@ export const api = {
   },
 };
 
-export { TESORERIA_URL };
 export default api;

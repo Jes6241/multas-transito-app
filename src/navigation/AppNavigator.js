@@ -13,6 +13,13 @@ import BuscarFolioScreen from '../screens/ciudadano/BuscarFolioScreen';
 import DetalleMultaScreen from '../screens/ciudadano/DetalleMultaScreen';
 import PagarMultaScreen from '../screens/ciudadano/PagarMultaScreen';
 import ImpugnacionScreen from '../screens/ciudadano/ImpugnacionScreen';
+import MisVehiculosScreen from '../screens/ciudadano/MisVehiculosScreen';
+import MisMultasScreen from '../screens/ciudadano/MisMultasScreen';
+import MisPagosScreen from '../screens/ciudadano/MisPagosScreen';
+import MisImpugnacionesScreen from '../screens/ciudadano/MisImpugnacionesScreen';
+import DescuentosInfoScreen from '../screens/ciudadano/DescuentosInfoScreen';
+import ConsultaCorralónScreen from '../screens/ciudadano/ConsultaCorralónScreen';
+import ReportarErrorScreen from '../screens/ciudadano/ReportarErrorScreen';
 
 // Screens Agente
 import AgenteHomeScreen from '../screens/agente/AgenteHomeScreen';
@@ -73,6 +80,41 @@ function CiudadanoNavigator() {
         name="Impugnacion"
         component={ImpugnacionScreen}
         options={{ title:  'Impugnar Multa' }}
+      />
+      <Stack.Screen
+        name="MisVehiculos"
+        component={MisVehiculosScreen}
+        options={{ title: 'Mis Vehículos' }}
+      />
+      <Stack.Screen
+        name="MisMultas"
+        component={MisMultasScreen}
+        options={{ title: 'Mis Multas' }}
+      />
+      <Stack.Screen
+        name="MisPagos"
+        component={MisPagosScreen}
+        options={{ title: 'Mis Pagos' }}
+      />
+      <Stack.Screen
+        name="MisImpugnaciones"
+        component={MisImpugnacionesScreen}
+        options={{ title: 'Mis Impugnaciones' }}
+      />
+      <Stack.Screen
+        name="DescuentosInfo"
+        component={DescuentosInfoScreen}
+        options={{ title: 'Descuentos y Consecuencias' }}
+      />
+      <Stack.Screen
+        name="ConsultaCorralon"
+        component={ConsultaCorralónScreen}
+        options={{ title: 'Consultar Corralón' }}
+      />
+      <Stack.Screen
+        name="ReportarError"
+        component={ReportarErrorScreen}
+        options={{ title: 'Reportar Error' }}
       />
       <Stack.Screen
         name="Login"

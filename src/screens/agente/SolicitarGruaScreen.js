@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,47 +13,63 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { COLORS, SHADOWS } from '../../config/theme';
 import { useAuth } from '../../context/AuthContext';
+import { API } from '../../config/api';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
+import { generarFolioTemporal, generarLineaCapturaTesoreria, generarLineaCaptura, generarFechaVencimiento } from './utils';
 
 const API_URL = 'https://multas-transito-api.onrender.com';
 
 const MOTIVOS_REMISION = [
-  'Estacionamiento prohibido',
-  'Abandono de vehículo',
-  'Accidente vial',
-  'Infracción grave',
-  'Vehículo sin placas',
-  'Operativo alcoholímetro',
-  'Otro',
+  { id: 'estacionamiento_prohibido', label: 'Estacionamiento prohibido', monto: 800, icon: 'ban' },
+  { id: 'abandono', label: 'Abandono de vehículo', monto: 1500, icon: 'time' },
+  { id: 'accidente', label: 'Accidente vial', monto: 2000, icon: 'warning' },
+  { id: 'infraccion_grave', label: 'Infracción grave', monto: 2500, icon: 'alert-circle' },
+  { id: 'sin_placas', label: 'Vehículo sin placas', monto: 1800, icon: 'close-circle' },
+  { id: 'alcoholimetro', label: 'Operativo alcoholímetro', monto: 3500, icon: 'wine' },
+  { id: 'otro', label: 'Otro', monto: 1000, icon: 'ellipsis-horizontal' },
 ];
 
-// Montos por tipo de infracción
-const MONTOS_INFRACCION = {
-  'Estacionamiento prohibido': 800,
-  'Abandono de vehículo': 1500,
-  'Accidente vial': 2000,
-  'Infracción grave':  2500,
-  'Vehículo sin placas': 1800,
-  'Operativo alcoholímetro': 3500,
-  'Otro': 1000,
-};
+const TIPOS_VEHICULO = [
+  { id: 'automovil', label: 'Auto', icon: 'car' },
+  { id: 'motocicleta', label: 'Moto', icon: 'bicycle' },
+  { id: 'camioneta', label: 'Camioneta', icon: 'bus' },
+  { id: 'camion', label: 'Camión', icon: 'train' },
+];
 
 export default function SolicitarGruaScreen({ navigation }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingGruas, setLoadingGruas] = useState(true);
   const [location, setLocation] = useState(null);
+  const [direccion, setDireccion] = useState('');
   const [gruasDisponibles, setGruasDisponibles] = useState([]);
   const [gruaSeleccionada, setGruaSeleccionada] = useState(null);
-  const [vehiculos, setVehiculos] = useState([{ placa: '', marca: '', color: '', motivo: '' }]);
-  const [direccion, setDireccion] = useState('');
   const [notas, setNotas] = useState('');
+
+  // Estado para múltiples vehículos
+  const [vehiculos, setVehiculos] = useState([{
+    placa: '',
+    motivo: null,
+    // Datos del vehículo (búsqueda o manual)
+    vehiculoEncontrado: null,
+    vehiculoNuevo: false,
+    buscandoVehiculo: false,
+    datosVehiculo: {
+      marca: '',
+      modelo: '',
+      anio: '',
+      color: '',
+      numero_serie: '',
+      tipo_vehiculo: 'automovil',
+    },
+  }]);
 
   useEffect(() => {
     getLocation();
   }, []);
 
+  // ========== FUNCIONES DE UBICACIÓN ==========
   const calcularDistancia = (lat1, lon1, lat2, lon2) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return null;
     const R = 6371;
@@ -70,7 +86,7 @@ export default function SolicitarGruaScreen({ navigation }) {
   };
 
   const estimarTiempoLlegada = (distanciaKm) => {
-    if (! distanciaKm) return 'No disponible';
+    if (!distanciaKm) return 'No disponible';
     const tiempoMinutos = Math.round((distanciaKm / 30) * 60);
     if (tiempoMinutos < 1) return '< 1 min';
     if (tiempoMinutos < 60) return `${tiempoMinutos} min`;
@@ -84,13 +100,13 @@ export default function SolicitarGruaScreen({ navigation }) {
       const response = await fetch(`${API_URL}/api/gruas/disponibles`);
       const data = await response.json();
 
-      if (data. success && data.gruas) {
+      if (data.success && data.gruas) {
         let gruasConDistancia = data.gruas.map((grua) => {
           const distancia = calcularDistancia(
-            userLocation?. latitude,
-            userLocation?. longitude,
-            parseFloat(grua. latitud),
-            parseFloat(grua. longitud)
+            userLocation?.latitude,
+            userLocation?.longitude,
+            parseFloat(grua.latitud),
+            parseFloat(grua.longitud)
           );
           return {
             ...grua,
@@ -99,21 +115,19 @@ export default function SolicitarGruaScreen({ navigation }) {
           };
         });
 
-        gruasConDistancia. sort((a, b) => {
-          if (! a.distancia) return 1;
-          if (!b. distancia) return -1;
+        gruasConDistancia.sort((a, b) => {
+          if (!a.distancia) return 1;
+          if (!b.distancia) return -1;
           return a.distancia - b.distancia;
         });
 
         setGruasDisponibles(gruasConDistancia);
-
-        if (gruasConDistancia. length > 0) {
+        if (gruasConDistancia.length > 0) {
           setGruaSeleccionada(gruasConDistancia[0]);
         }
       }
     } catch (error) {
       console.error('Error cargando grúas:', error);
-      Alert.alert('Error', 'No se pudieron cargar las grúas');
     } finally {
       setLoadingGruas(false);
     }
@@ -123,7 +137,7 @@ export default function SolicitarGruaScreen({ navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert. alert('Permiso denegado', 'Se necesita acceso a la ubicación');
+        Alert.alert('Permiso denegado', 'Se necesita acceso a la ubicación');
         cargarGruasDisponibles(null);
         return;
       }
@@ -142,21 +156,126 @@ export default function SolicitarGruaScreen({ navigation }) {
         );
       }
 
-      cargarGruasDisponibles(loc. coords);
+      cargarGruasDisponibles(loc.coords);
     } catch (error) {
       console.error('Error ubicación:', error);
       cargarGruasDisponibles(null);
     }
   };
 
+  // ========== FUNCIONES DE VEHÍCULOS ==========
+  const buscarVehiculo = useCallback(async (index, placa) => {
+    if (!placa || placa.length < 5) {
+      actualizarVehiculo(index, {
+        vehiculoEncontrado: null,
+        vehiculoNuevo: false,
+        buscandoVehiculo: false,
+      });
+      return;
+    }
+
+    actualizarVehiculo(index, { buscandoVehiculo: true });
+
+    try {
+      const response = await fetch(API.VEHICULOS(placa.toUpperCase()));
+      const data = await response.json();
+
+      if (data.success && data.vehiculo) {
+        const vehiculo = data.vehiculo;
+        const datosCompletos = vehiculo.marca && vehiculo.color;
+
+        if (datosCompletos) {
+          actualizarVehiculo(index, {
+            vehiculoEncontrado: vehiculo,
+            vehiculoNuevo: false,
+            buscandoVehiculo: false,
+            datosVehiculo: {
+              marca: vehiculo.marca || '',
+              modelo: vehiculo.modelo || '',
+              anio: vehiculo.anio?.toString() || '',
+              color: vehiculo.color || '',
+              numero_serie: vehiculo.numero_serie || '',
+              tipo_vehiculo: vehiculo.tipo_vehiculo || 'automovil',
+            },
+          });
+        } else {
+          actualizarVehiculo(index, {
+            vehiculoEncontrado: null,
+            vehiculoNuevo: true,
+            buscandoVehiculo: false,
+            datosVehiculo: {
+              marca: vehiculo.marca || '',
+              modelo: vehiculo.modelo || '',
+              anio: vehiculo.anio?.toString() || '',
+              color: vehiculo.color || '',
+              numero_serie: vehiculo.numero_serie || '',
+              tipo_vehiculo: vehiculo.tipo_vehiculo || 'automovil',
+            },
+          });
+        }
+      } else {
+        actualizarVehiculo(index, {
+          vehiculoEncontrado: null,
+          vehiculoNuevo: true,
+          buscandoVehiculo: false,
+          datosVehiculo: {
+            marca: '',
+            modelo: '',
+            anio: '',
+            color: '',
+            numero_serie: '',
+            tipo_vehiculo: 'automovil',
+          },
+        });
+      }
+    } catch (error) {
+      console.log('Error buscando vehículo:', error);
+      actualizarVehiculo(index, {
+        vehiculoEncontrado: null,
+        vehiculoNuevo: true,
+        buscandoVehiculo: false,
+      });
+    }
+  }, []);
+
   const agregarVehiculo = () => {
-    setVehiculos([... vehiculos, { placa: '', marca:  '', color: '', motivo: '' }]);
+    setVehiculos([...vehiculos, {
+      placa: '',
+      motivo: null,
+      vehiculoEncontrado: null,
+      vehiculoNuevo: false,
+      buscandoVehiculo: false,
+      datosVehiculo: {
+        marca: '',
+        modelo: '',
+        anio: '',
+        color: '',
+        numero_serie: '',
+        tipo_vehiculo: 'automovil',
+      },
+    }]);
   };
 
-  const actualizarVehiculo = (index, campo, valor) => {
-    const nuevos = [...vehiculos];
-    nuevos[index][campo] = valor;
-    setVehiculos(nuevos);
+  const actualizarVehiculo = (index, updates) => {
+    setVehiculos(prev => {
+      const nuevos = [...prev];
+      nuevos[index] = { ...nuevos[index], ...updates };
+      return nuevos;
+    });
+  };
+
+  const actualizarDatosVehiculo = (index, campo, valor) => {
+    setVehiculos(prev => {
+      const nuevos = [...prev];
+      nuevos[index] = {
+        ...nuevos[index],
+        datosVehiculo: {
+          ...nuevos[index].datosVehiculo,
+          [campo]: valor,
+        },
+      };
+      return nuevos;
+    });
   };
 
   const eliminarVehiculo = (index) => {
@@ -165,54 +284,133 @@ export default function SolicitarGruaScreen({ navigation }) {
     }
   };
 
-  // =============================================
-  // FUNCIÓN PRINCIPAL:  Crear multas y solicitar grúa
-  // =============================================
-  const enviarSolicitud = async () => {
+  const handlePlacaChange = (index, text) => {
+    const placa = text.toUpperCase();
+    actualizarVehiculo(index, { placa });
+
+    // Debounce para buscar vehículo
+    if (placa.length >= 5) {
+      setTimeout(() => buscarVehiculo(index, placa), 500);
+    }
+  };
+
+  // ========== ENVIAR SOLICITUD ==========
+  const validarFormulario = () => {
+    for (let i = 0; i < vehiculos.length; i++) {
+      const v = vehiculos[i];
+      if (!v.placa.trim()) {
+        Alert.alert('Error', `Ingresa la placa del vehículo ${i + 1}`);
+        return false;
+      }
+      if (!v.motivo) {
+        Alert.alert('Error', `Selecciona el motivo para el vehículo ${i + 1}`);
+        return false;
+      }
+      // Si es vehículo nuevo, validar marca y color
+      if (v.vehiculoNuevo) {
+        if (!v.datosVehiculo.marca.trim()) {
+          Alert.alert('Error', `Ingresa la marca del vehículo ${i + 1}`);
+          return false;
+        }
+        if (!v.datosVehiculo.color.trim()) {
+          Alert.alert('Error', `Ingresa el color del vehículo ${i + 1}`);
+          return false;
+        }
+      }
+    }
     if (!gruaSeleccionada) {
       Alert.alert('Error', 'Selecciona una grúa');
-      return;
+      return false;
     }
+    return true;
+  };
 
-    if (vehiculos.some((v) => !v.placa. trim())) {
-      Alert.alert('Error', 'Ingresa la placa de todos los vehículos');
-      return;
-    }
-
-    if (vehiculos.some((v) => !v.motivo)) {
-      Alert. alert('Error', 'Selecciona el motivo para todos los vehículos');
-      return;
-    }
+  const enviarSolicitud = async () => {
+    if (!validarFormulario()) return;
 
     setLoading(true);
 
     try {
-      console.log('\n🚗 ========================================');
-      console.log('🚗 Iniciando proceso de solicitud de grúa');
-      console.log('🚗 ========================================');
+      console.log('\n🚛 ========================================');
+      console.log('🚛 Iniciando proceso de solicitud de grúa');
+      console.log('🚛 ========================================');
 
       const multasCreadas = [];
       const vehiculosConMulta = [];
 
       // PASO 1: Crear multa para cada vehículo
       for (const vehiculo of vehiculos) {
-        console.log(`\n📝 Creando multa para placa: ${vehiculo.placa}`);
+        const motivoData = MOTIVOS_REMISION.find(m => m.id === vehiculo.motivo);
+        const monto = motivoData?.monto || 1000;
 
-        const monto = MONTOS_INFRACCION[vehiculo.motivo] || 1000;
+        // Generar folio con el mismo formato que LevantarMultaScreen
+        const folio = generarFolioTemporal('otros', false, user?.id);
+        
+        // Generar línea de captura desde Tesorería
+        let lineaCaptura;
+        let fechaVencimiento;
+        let lineaCapturaId = null;
+
+        try {
+          const resultadoLinea = await generarLineaCapturaTesoreria({
+            monto: monto,
+            folio: folio,
+            concepto: `Remisión a corralón: ${motivoData?.label || 'Infracción'}`,
+          });
+          lineaCaptura = resultadoLinea.codigo;
+          fechaVencimiento = resultadoLinea.fecha_vencimiento;
+          lineaCapturaId = resultadoLinea.id || null;
+        } catch (error) {
+          console.log('Error con Tesorería, usando línea local:', error);
+          lineaCaptura = generarLineaCaptura();
+          fechaVencimiento = generarFechaVencimiento();
+        }
+
+        console.log(`\n📝 Creando multa para placa: ${vehiculo.placa}`);
+        console.log(`   Folio: ${folio}`);
+        console.log(`   Línea de captura: ${lineaCaptura}`);
+
+        // Datos del vehículo para la multa
+        const datosVehiculoMulta = vehiculo.vehiculoEncontrado || vehiculo.datosVehiculo;
 
         const multaData = {
-          placa: vehiculo. placa. toUpperCase(),
-          tipo_infraccion: vehiculo.motivo,
-          descripcion: `${vehiculo.motivo} - Remisión a corralón`,
+          placa: vehiculo.placa.toUpperCase(),
+          tipo_infraccion: motivoData?.label || 'Infracción',
+          descripcion: `${motivoData?.label || 'Infracción'} - Remisión a corralón`,
           monto: monto,
           monto_final: monto,
           descuento: 0,
           direccion: direccion,
-          latitud: location?. latitude || null,
+          latitud: location?.latitude || null,
           longitud: location?.longitude || null,
           agente_id: user?.id || null,
+          folio: folio,
+          linea_captura: lineaCaptura,
+          linea_captura_id: lineaCapturaId,
+          fecha_vencimiento: fechaVencimiento,
           fotos: [],
+          vehiculos: {
+            placa: vehiculo.placa.toUpperCase(),
+            marca: datosVehiculoMulta.marca || null,
+            modelo: datosVehiculoMulta.modelo || null,
+            anio: datosVehiculoMulta.anio ? parseInt(datosVehiculoMulta.anio) : null,
+            color: datosVehiculoMulta.color || null,
+            tipo_vehiculo: datosVehiculoMulta.tipo_vehiculo || 'automovil',
+          },
         };
+
+        // Actualizar/crear vehículo si es nuevo
+        if (vehiculo.vehiculoNuevo && vehiculo.datosVehiculo.marca) {
+          try {
+            await fetch(`${API_URL}/api/vehiculos/${vehiculo.placa.toUpperCase()}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(vehiculo.datosVehiculo),
+            });
+          } catch (e) {
+            console.log('Error actualizando vehículo:', e);
+          }
+        }
 
         const response = await fetch(`${API_URL}/api/multas`, {
           method: 'POST',
@@ -222,37 +420,41 @@ export default function SolicitarGruaScreen({ navigation }) {
 
         const data = await response.json();
 
-        if (data. success && data.multa) {
-          console.log(`✅ Multa creada:  ${data.multa.folio}`);
-          multasCreadas.push(data.multa);
+        if (data.success && data.multa) {
+          console.log(`✅ Multa creada: ${data.multa.folio}`);
+          multasCreadas.push({
+            ...data.multa,
+            folio: folio, // Usar el folio generado
+            linea_captura: lineaCaptura,
+          });
           vehiculosConMulta.push({
-            ... vehiculo,
-            placa: vehiculo.placa. toUpperCase(),
+            placa: vehiculo.placa.toUpperCase(),
+            marca: datosVehiculoMulta.marca,
+            color: datosVehiculoMulta.color,
+            motivo: motivoData?.label,
             multa_id: data.multa.id,
-            folio_multa: data. multa.folio,
+            folio_multa: folio,
+            linea_captura: lineaCaptura,
           });
         } else {
-          console.error(`❌ Error creando multa para ${vehiculo.placa}:`, data.error);
-          throw new Error(`No se pudo crear multa para ${vehiculo.placa}:  ${data.error || 'Error desconocido'}`);
+          throw new Error(`No se pudo crear multa para ${vehiculo.placa}`);
         }
       }
 
-      console.log(`\n✅ ${multasCreadas. length} multa(s) creada(s)`);
+      console.log(`\n✅ ${multasCreadas.length} multa(s) creada(s)`);
 
-      // PASO 2: Crear solicitud de grúa con las multas
-      console.log('\n🚛 Creando solicitud de grúa.. .');
+      // PASO 2: Crear solicitud de grúa
+      console.log('\n🚛 Creando solicitud de grúa...');
 
-      // Usamos el primer multa_id para la solicitud principal
-      // y guardamos todos los vehículos con sus multas en notas
       const solicitud = {
         agente_id: user?.id || null,
         grua_id: gruaSeleccionada.id,
-        multa_id: multasCreadas[0]?.id || null, // Multa principal
+        multa_id: multasCreadas[0]?.id || null,
         ubicacion: direccion,
         latitud: location?.latitude || null,
-        longitud: location?. longitude || null,
+        longitud: location?.longitude || null,
         notas: notas,
-        vehiculos: vehiculosConMulta, // Incluye multa_id por cada vehículo
+        vehiculos: vehiculosConMulta,
       };
 
       const response = await fetch(`${API_URL}/api/solicitudes-grua`, {
@@ -264,21 +466,18 @@ export default function SolicitarGruaScreen({ navigation }) {
       const data = await response.json();
 
       if (data.success) {
-        console. log('✅ Solicitud de grúa creada exitosamente');
-        console.log('🎉 ========================================\n');
+        console.log('✅ Solicitud de grúa creada exitosamente');
 
         // Construir mensaje de confirmación
-        const foliosMultas = multasCreadas.map(m => m.folio).join(', ');
+        const foliosMultas = multasCreadas.map(m => m.folio).join('\n• ');
 
         Alert.alert(
           '✅ Grúa Solicitada',
-          `Grúa:  ${gruaSeleccionada.numero}\n` +
-            `Operador: ${gruaSeleccionada.operador_nombre}\n` +
-            `Teléfono: ${gruaSeleccionada.operador_telefono}\n` +
-            `Tiempo estimado: ${gruaSeleccionada.tiempoEstimado}\n\n` +
-            `📋 Multas creadas:  ${multasCreadas.length}\n` +
-            `Folios:  ${foliosMultas}\n\n` +
-            `🚗 Vehículos:  ${vehiculos.length}`,
+          `🚛 Grúa: ${gruaSeleccionada.numero}\n` +
+            `👷 Operador: ${gruaSeleccionada.operador_nombre}\n` +
+            `📞 Tel: ${gruaSeleccionada.operador_telefono}\n` +
+            `⏱️ Tiempo: ${gruaSeleccionada.tiempoEstimado}\n\n` +
+            `📋 Multas creadas (${multasCreadas.length}):\n• ${foliosMultas}`,
           [
             {
               text: 'Llamar Operador',
@@ -288,25 +487,26 @@ export default function SolicitarGruaScreen({ navigation }) {
           ]
         );
       } else {
-        throw new Error(data. error || 'No se pudo crear la solicitud');
+        throw new Error(data.error || 'No se pudo crear la solicitud');
       }
     } catch (error) {
-      console. error('❌ Error en el proceso:', error);
+      console.error('❌ Error en el proceso:', error);
       Alert.alert('Error', error.message || 'No se pudo completar la solicitud');
     } finally {
       setLoading(false);
     }
   };
 
-  // Calcular monto total
   const calcularMontoTotal = () => {
     return vehiculos.reduce((total, v) => {
-      return total + (MONTOS_INFRACCION[v. motivo] || 0);
+      const motivoData = MOTIVOS_REMISION.find(m => m.id === v.motivo);
+      return total + (motivoData?.monto || 0);
     }, 0);
   };
 
+  // ========== RENDER ==========
   return (
-    <ScrollView style={styles. container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Ubicación */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>
@@ -314,9 +514,9 @@ export default function SolicitarGruaScreen({ navigation }) {
         </Text>
         <View style={styles.ubicacionBox}>
           <Ionicons name="navigate" size={20} color="#10B981" />
-          <Text style={styles.ubicacionText}>{direccion || 'Obteniendo.. .'}</Text>
+          <Text style={styles.ubicacionText}>{direccion || 'Obteniendo...'}</Text>
           <TouchableOpacity onPress={getLocation}>
-            <Ionicons name="refresh" size={20} color={COLORS. primary} />
+            <Ionicons name="refresh" size={20} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -324,72 +524,206 @@ export default function SolicitarGruaScreen({ navigation }) {
       {/* Vehículos */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles. cardTitle}>
-            <Ionicons name="car" size={20} color={COLORS.primary} /> Vehículos ({vehiculos.length})
+          <Text style={styles.cardTitle}>
+            <Ionicons name="car" size={20} color={COLORS.primary} /> Vehículos a Remitir ({vehiculos.length})
           </Text>
-          <TouchableOpacity onPress={agregarVehiculo}>
+          <TouchableOpacity onPress={agregarVehiculo} style={styles.addBtn}>
             <Ionicons name="add-circle" size={28} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
         {vehiculos.map((vehiculo, index) => (
           <View key={index} style={styles.vehiculoCard}>
+            {/* Header del vehículo */}
             <View style={styles.vehiculoHeader}>
-              <Text style={styles.vehiculoNumero}>Vehículo {index + 1}</Text>
+              <View style={styles.vehiculoNumeroContainer}>
+                <Ionicons name="car-sport" size={20} color={COLORS.primary} />
+                <Text style={styles.vehiculoNumero}>Vehículo {index + 1}</Text>
+              </View>
               {vehiculos.length > 1 && (
                 <TouchableOpacity onPress={() => eliminarVehiculo(index)}>
-                  <Ionicons name="trash" size={20} color="#EF4444" />
+                  <Ionicons name="trash" size={22} color="#EF4444" />
                 </TouchableOpacity>
               )}
             </View>
 
+            {/* Placa */}
             <Input
-              placeholder="Placa *"
+              label="Número de Placa *"
+              placeholder="ABC-123"
               value={vehiculo.placa}
-              onChangeText={(t) => actualizarVehiculo(index, 'placa', t. toUpperCase())}
+              onChangeText={(text) => handlePlacaChange(index, text)}
               autoCapitalize="characters"
+              icon={<Ionicons name="keypad" size={18} color={COLORS.gray[400]} />}
             />
 
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  placeholder="Marca"
-                  value={vehiculo.marca}
-                  onChangeText={(t) => actualizarVehiculo(index, 'marca', t)}
-                />
+            {/* Indicador de búsqueda */}
+            {vehiculo.buscandoVehiculo && (
+              <View style={styles.buscandoContainer}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.buscandoText}>Buscando vehículo...</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Input
-                  placeholder="Color"
-                  value={vehiculo.color}
-                  onChangeText={(t) => actualizarVehiculo(index, 'color', t)}
-                />
+            )}
+
+            {/* Vehículo encontrado */}
+            {vehiculo.vehiculoEncontrado && !vehiculo.buscandoVehiculo && (
+              <View style={styles.vehiculoEncontrado}>
+                <View style={styles.vehiculoEncontradoHeader}>
+                  <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                  <Text style={styles.vehiculoEncontradoTitle}>Vehículo Registrado</Text>
+                </View>
+                <View style={styles.vehiculoInfoGrid}>
+                  <View style={styles.vehiculoInfoItem}>
+                    <Text style={styles.vehiculoInfoLabel}>Marca</Text>
+                    <Text style={styles.vehiculoInfoValue}>{vehiculo.vehiculoEncontrado.marca || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.vehiculoInfoItem}>
+                    <Text style={styles.vehiculoInfoLabel}>Modelo</Text>
+                    <Text style={styles.vehiculoInfoValue}>{vehiculo.vehiculoEncontrado.modelo || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.vehiculoInfoItem}>
+                    <Text style={styles.vehiculoInfoLabel}>Color</Text>
+                    <Text style={styles.vehiculoInfoValue}>{vehiculo.vehiculoEncontrado.color || 'N/A'}</Text>
+                  </View>
+                  {vehiculo.vehiculoEncontrado.anio && (
+                    <View style={styles.vehiculoInfoItem}>
+                      <Text style={styles.vehiculoInfoLabel}>Año</Text>
+                      <Text style={styles.vehiculoInfoValue}>{vehiculo.vehiculoEncontrado.anio}</Text>
+                    </View>
+                  )}
+                </View>
               </View>
+            )}
+
+            {/* Vehículo nuevo - Formulario */}
+            {vehiculo.vehiculoNuevo && !vehiculo.buscandoVehiculo && vehiculo.placa.length >= 5 && (
+              <View style={styles.vehiculoNuevo}>
+                <View style={styles.vehiculoNuevoHeader}>
+                  <Ionicons name="alert-circle" size={24} color="#F59E0B" />
+                  <Text style={styles.vehiculoNuevoTitle}>Vehículo No Registrado</Text>
+                </View>
+                <Text style={styles.vehiculoNuevoSubtitle}>Ingresa los datos del vehículo</Text>
+
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Input
+                      label="Marca *"
+                      placeholder="Ej: Nissan"
+                      value={vehiculo.datosVehiculo.marca}
+                      onChangeText={(text) => actualizarDatosVehiculo(index, 'marca', text)}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Input
+                      label="Modelo"
+                      placeholder="Ej: Sentra"
+                      value={vehiculo.datosVehiculo.modelo}
+                      onChangeText={(text) => actualizarDatosVehiculo(index, 'modelo', text)}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Input
+                      label="Color *"
+                      placeholder="Ej: Rojo"
+                      value={vehiculo.datosVehiculo.color}
+                      onChangeText={(text) => actualizarDatosVehiculo(index, 'color', text)}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Input
+                      label="Año"
+                      placeholder="2020"
+                      value={vehiculo.datosVehiculo.anio}
+                      onChangeText={(text) => actualizarDatosVehiculo(index, 'anio', text.replace(/[^0-9]/g, ''))}
+                      keyboardType="numeric"
+                      maxLength={4}
+                    />
+                  </View>
+                </View>
+
+                {/* Tipo de vehículo */}
+                <Text style={styles.label}>Tipo de Vehículo</Text>
+                <View style={styles.tipoVehiculoRow}>
+                  {TIPOS_VEHICULO.map((tipo) => (
+                    <TouchableOpacity
+                      key={tipo.id}
+                      style={[
+                        styles.tipoVehiculoBtn,
+                        vehiculo.datosVehiculo.tipo_vehiculo === tipo.id && styles.tipoVehiculoBtnActivo,
+                      ]}
+                      onPress={() => actualizarDatosVehiculo(index, 'tipo_vehiculo', tipo.id)}
+                    >
+                      <Ionicons
+                        name={tipo.icon}
+                        size={18}
+                        color={vehiculo.datosVehiculo.tipo_vehiculo === tipo.id ? '#fff' : '#6B7280'}
+                      />
+                      <Text
+                        style={[
+                          styles.tipoVehiculoText,
+                          vehiculo.datosVehiculo.tipo_vehiculo === tipo.id && styles.tipoVehiculoTextActivo,
+                        ]}
+                      >
+                        {tipo.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Motivo de remisión */}
+            <Text style={styles.label}>Motivo de Remisión *</Text>
+            <View style={styles.motivosGrid}>
+              {MOTIVOS_REMISION.map((motivo) => (
+                <TouchableOpacity
+                  key={motivo.id}
+                  style={[
+                    styles.motivoBtn,
+                    vehiculo.motivo === motivo.id && styles.motivoBtnActivo,
+                  ]}
+                  onPress={() => actualizarVehiculo(index, { motivo: motivo.id })}
+                >
+                  <Ionicons
+                    name={motivo.icon}
+                    size={20}
+                    color={vehiculo.motivo === motivo.id ? '#fff' : '#6B7280'}
+                  />
+                  <Text
+                    style={[
+                      styles.motivoText,
+                      vehiculo.motivo === motivo.id && styles.motivoTextActivo,
+                    ]}
+                  >
+                    {motivo.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.motivoMonto,
+                      vehiculo.motivo === motivo.id && styles.motivoMontoActivo,
+                    ]}
+                  >
+                    ${motivo.monto.toLocaleString()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
-            <Text style={styles.label}>Motivo de remisión *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.motivosRow}>
-                {MOTIVOS_REMISION.map((motivo) => (
-                  <TouchableOpacity
-                    key={motivo}
-                    style={[styles.motivoBtn, vehiculo.motivo === motivo && styles. motivoBtnActivo]}
-                    onPress={() => actualizarVehiculo(index, 'motivo', motivo)}
-                  >
-                    <Text style={[styles.motivoText, vehiculo.motivo === motivo && styles. motivoTextActivo]}>
-                      {motivo}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-
-            {/* Mostrar monto de la multa */}
-            {vehiculo. motivo && (
-              <View style={styles.montoPreview}>
-                <Ionicons name="cash" size={16} color="#059669" />
-                <Text style={styles.montoPreviewText}>
-                  Multa:  ${MONTOS_INFRACCION[vehiculo.motivo]?. toLocaleString()} MXN
+            {/* Preview de multa */}
+            {vehiculo.motivo && (
+              <View style={styles.multaPreview}>
+                <Ionicons name="document-text" size={20} color="#059669" />
+                <View style={styles.multaPreviewContent}>
+                  <Text style={styles.multaPreviewTitle}>Se generará multa</Text>
+                  <Text style={styles.multaPreviewText}>
+                    Folio único + Línea de captura de Tesorería
+                  </Text>
+                </View>
+                <Text style={styles.multaPreviewMonto}>
+                  ${MOTIVOS_REMISION.find(m => m.id === vehiculo.motivo)?.monto.toLocaleString()}
                 </Text>
               </View>
             )}
@@ -397,18 +731,18 @@ export default function SolicitarGruaScreen({ navigation }) {
         ))}
       </View>
 
-      {/* Grúas */}
+      {/* Grúas Disponibles */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>
-          <Ionicons name="car-sport" size={20} color={COLORS. primary} /> Grúas Disponibles
+          <Ionicons name="car-sport" size={20} color={COLORS.primary} /> Grúas Disponibles
         </Text>
 
-        {loadingGruas ?  (
+        {loadingGruas ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={styles.loadingText}>Buscando grúas cercanas...</Text>
           </View>
-        ) : gruasDisponibles. length === 0 ? (
+        ) : gruasDisponibles.length === 0 ? (
           <View style={styles.noGruas}>
             <Ionicons name="alert-circle" size={40} color="#F59E0B" />
             <Text style={styles.noGruasText}>No hay grúas disponibles</Text>
@@ -419,10 +753,10 @@ export default function SolicitarGruaScreen({ navigation }) {
           </View>
         ) : (
           <>
-            <View style={styles. cercanaInfo}>
+            <View style={styles.cercanaInfo}>
               <Ionicons name="flash" size={16} color="#10B981" />
               <Text style={styles.cercanaText}>
-                La grúa más cercana está a {gruasDisponibles[0]?.distancia?. toFixed(1)} km
+                Grúa más cercana a {gruasDisponibles[0]?.distancia?.toFixed(1)} km
               </Text>
             </View>
 
@@ -431,24 +765,23 @@ export default function SolicitarGruaScreen({ navigation }) {
                 key={grua.id}
                 style={[
                   styles.gruaCard,
-                  gruaSeleccionada?. id === grua. id && styles.gruaSeleccionada,
-                  index === 0 && styles. gruaMasCercana,
+                  gruaSeleccionada?.id === grua.id && styles.gruaSeleccionada,
+                  index === 0 && styles.gruaMasCercana,
                 ]}
                 onPress={() => setGruaSeleccionada(grua)}
               >
                 {index === 0 && (
-                  <View style={styles. masCercanaBadge}>
+                  <View style={styles.masCercanaBadge}>
                     <Ionicons name="flash" size={12} color="#fff" />
                     <Text style={styles.masCercanaText}>Más cercana</Text>
                   </View>
                 )}
 
                 <View style={styles.gruaContent}>
-                  <View style={styles. gruaInfo}>
+                  <View style={styles.gruaInfo}>
                     <Text style={styles.gruaNumero}>{grua.numero}</Text>
-                    <Text style={styles.gruaOperador}>👷 {grua. operador_nombre}</Text>
+                    <Text style={styles.gruaOperador}>👷 {grua.operador_nombre}</Text>
                     <Text style={styles.gruaTelefono}>📞 {grua.operador_telefono}</Text>
-                    <Text style={styles.gruaUbicacion}>📍 {grua.ubicacion_actual}</Text>
                   </View>
 
                   <View style={styles.gruaDistancia}>
@@ -463,7 +796,7 @@ export default function SolicitarGruaScreen({ navigation }) {
                       </>
                     )}
                     {gruaSeleccionada?.id === grua.id && (
-                      <Ionicons name="checkmark-circle" size={28} color="#10B981" />
+                      <Ionicons name="checkmark-circle" size={28} color="#10B981" style={{ marginTop: 5 }} />
                     )}
                   </View>
                 </View>
@@ -476,37 +809,39 @@ export default function SolicitarGruaScreen({ navigation }) {
       {/* Notas */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>
-          <Ionicons name="document-text" size={20} color={COLORS.primary} /> Notas adicionales
+          <Ionicons name="document-text" size={20} color={COLORS.primary} /> Notas Adicionales
         </Text>
-        <Input placeholder="Instrucciones adicionales..." value={notas} onChangeText={setNotas} multiline />
+        <Input
+          placeholder="Instrucciones especiales para la grúa..."
+          value={notas}
+          onChangeText={setNotas}
+          multiline
+        />
       </View>
 
       {/* Resumen */}
-      {gruaSeleccionada && (
+      {gruaSeleccionada && vehiculos.some(v => v.motivo) && (
         <View style={styles.resumenCard}>
-          <Text style={styles. resumenTitle}>📋 Resumen</Text>
+          <Text style={styles.resumenTitle}>📋 Resumen de Solicitud</Text>
+          
           <View style={styles.resumenRow}>
             <Text style={styles.resumenLabel}>Grúa:</Text>
-            <Text style={styles.resumenValue}>{gruaSeleccionada. numero}</Text>
+            <Text style={styles.resumenValue}>{gruaSeleccionada.numero}</Text>
           </View>
           <View style={styles.resumenRow}>
             <Text style={styles.resumenLabel}>Operador:</Text>
             <Text style={styles.resumenValue}>{gruaSeleccionada.operador_nombre}</Text>
           </View>
           <View style={styles.resumenRow}>
-            <Text style={styles. resumenLabel}>Distancia:</Text>
-            <Text style={styles.resumenValue}>{gruaSeleccionada.distancia?. toFixed(1)} km</Text>
-          </View>
-          <View style={styles.resumenRow}>
             <Text style={styles.resumenLabel}>Tiempo estimado:</Text>
-            <Text style={styles.resumenValue}>{gruaSeleccionada. tiempoEstimado}</Text>
+            <Text style={styles.resumenValue}>{gruaSeleccionada.tiempoEstimado}</Text>
           </View>
           <View style={styles.resumenRow}>
             <Text style={styles.resumenLabel}>Vehículos:</Text>
-            <Text style={styles.resumenValue}>{vehiculos. length}</Text>
+            <Text style={styles.resumenValue}>{vehiculos.length}</Text>
           </View>
           <View style={[styles.resumenRow, styles.resumenTotal]}>
-            <Text style={styles. resumenLabelTotal}>Total multas:</Text>
+            <Text style={styles.resumenLabelTotal}>Total multas:</Text>
             <Text style={styles.resumenValueTotal}>
               ${calcularMontoTotal().toLocaleString()} MXN
             </Text>
@@ -520,7 +855,7 @@ export default function SolicitarGruaScreen({ navigation }) {
           title={loading ? 'Procesando...' : `Crear Multa${vehiculos.length > 1 ? 's' : ''} y Solicitar Grúa`}
           onPress={enviarSolicitud}
           loading={loading}
-          disabled={!gruaSeleccionada || loadingGruas}
+          disabled={!gruaSeleccionada || loadingGruas || !vehiculos.some(v => v.motivo)}
           icon={<Ionicons name="send" size={20} color="#fff" />}
         />
       </View>
@@ -532,61 +867,184 @@ export default function SolicitarGruaScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
-  card:  {
+  card: {
     backgroundColor: '#fff',
     margin: 15,
     marginBottom: 0,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 15,
-    ... SHADOWS. small,
+    ...SHADOWS.small,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems:  'center' },
-  cardTitle:  { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 15 },
+  addBtn: { marginBottom: 15 },
   ubicacionBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0FDF4',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     gap: 10,
   },
   ubicacionText: { flex: 1, color: '#166534', fontWeight: '500' },
-  vehiculoCard: { backgroundColor: '#F9FAFB', padding: 15, borderRadius: 10, marginBottom: 10 },
-  vehiculoHeader:  { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  vehiculoNumero:  { fontWeight: 'bold', color:  COLORS.primary },
-  row: { flexDirection:  'row', gap: 10 },
-  label: { fontSize: 14, fontWeight: '600', color: '#6B7280', marginTop: 10, marginBottom: 8 },
-  motivosRow: { flexDirection: 'row', gap: 8 },
-  motivoBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E5E7EB' },
-  motivoBtnActivo:  { backgroundColor:  COLORS.primary },
-  motivoText: { fontSize:  12, color: '#4B5563' },
-  motivoTextActivo:  { color: '#fff', fontWeight: '600' },
-  montoPreview: {
+
+  // Vehículo Card
+  vehiculoCard: {
+    backgroundColor: '#F9FAFB',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  vehiculoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  vehiculoNumeroContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  vehiculoNumero: { fontWeight: 'bold', color: COLORS.primary, fontSize: 16 },
+
+  // Buscando
+  buscandoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 10,
+  },
+  buscandoText: { color: '#6B7280', fontSize: 13 },
+
+  // Vehículo encontrado
+  vehiculoEncontrado: {
+    backgroundColor: '#ECFDF5',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  vehiculoEncontradoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  vehiculoEncontradoTitle: { color: '#065F46', fontWeight: 'bold', fontSize: 15 },
+  vehiculoInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  vehiculoInfoItem: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: '45%',
+  },
+  vehiculoInfoLabel: { fontSize: 11, color: '#047857' },
+  vehiculoInfoValue: { fontSize: 14, fontWeight: '600', color: '#065F46' },
+
+  // Vehículo nuevo
+  vehiculoNuevo: {
+    backgroundColor: '#FFFBEB',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  vehiculoNuevoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 5,
+  },
+  vehiculoNuevoTitle: { color: '#92400E', fontWeight: 'bold', fontSize: 15 },
+  vehiculoNuevoSubtitle: { color: '#B45309', fontSize: 13, marginBottom: 15, marginLeft: 34 },
+
+  formRow: { flexDirection: 'row', gap: 10 },
+  formCol: { flex: 1 },
+
+  // Tipo de vehículo
+  label: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 10, marginBottom: 8 },
+  tipoVehiculoRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  tipoVehiculoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  tipoVehiculoBtnActivo: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tipoVehiculoText: { fontSize: 13, color: '#6B7280' },
+  tipoVehiculoTextActivo: { color: '#fff' },
+
+  // Motivos
+  motivosGrid: { gap: 8 },
+  motivoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    gap: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  motivoBtnActivo: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  motivoText: { flex: 1, fontSize: 14, color: '#4B5563' },
+  motivoTextActivo: { color: '#fff', fontWeight: '600' },
+  motivoMonto: { fontSize: 14, fontWeight: 'bold', color: '#6B7280' },
+  motivoMontoActivo: { color: '#fff' },
+
+  // Preview multa
+  multaPreview: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#D1FAE5',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 15,
+    gap: 10,
   },
-  montoPreviewText:  { color: '#059669', fontWeight:  '600' },
+  multaPreviewContent: { flex: 1 },
+  multaPreviewTitle: { color: '#065F46', fontWeight: '600', fontSize: 14 },
+  multaPreviewText: { color: '#047857', fontSize: 12 },
+  multaPreviewMonto: { color: '#059669', fontWeight: 'bold', fontSize: 18 },
+
+  // Grúas
   loadingContainer: { alignItems: 'center', padding: 30 },
   loadingText: { marginTop: 10, color: '#6B7280' },
   noGruas: { alignItems: 'center', padding: 20 },
-  noGruasText:  { color: '#F59E0B', marginTop: 10, marginBottom: 15 },
+  noGruasText: { color: '#F59E0B', marginTop: 10, marginBottom: 15 },
   recargarBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor:  COLORS.primary,
-    paddingHorizontal:  15,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
     gap: 5,
   },
-  recargarBtnText: { color: '#fff', fontWeight:  '600' },
+  recargarBtnText: { color: '#fff', fontWeight: '600' },
   cercanaInfo: {
-    flexDirection:  'row',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#D1FAE5',
     padding: 10,
@@ -594,7 +1052,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     gap: 8,
   },
-  cercanaText:  { color: '#065F46', fontSize: 13, fontWeight: '500' },
+  cercanaText: { color: '#065F46', fontSize: 13, fontWeight: '500' },
   gruaCard: {
     padding: 15,
     borderRadius: 12,
@@ -604,13 +1062,13 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   gruaSeleccionada: { borderColor: '#10B981', backgroundColor: '#ECFDF5' },
-  gruaMasCercana:  { borderColor: '#10B981', backgroundColor:  '#F0FDF4' },
+  gruaMasCercana: { borderColor: '#10B981', backgroundColor: '#F0FDF4' },
   masCercanaBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#10B981',
     alignSelf: 'flex-start',
-    paddingHorizontal:  10,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     marginBottom: 10,
@@ -620,32 +1078,34 @@ const styles = StyleSheet.create({
   gruaContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   gruaInfo: { flex: 1 },
   gruaNumero: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
-  gruaOperador: { fontSize:  14, color: '#4B5563', marginTop: 4 },
-  gruaTelefono:  { fontSize: 14, color:  COLORS.primary },
-  gruaUbicacion:  { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  gruaOperador: { fontSize: 14, color: '#4B5563', marginTop: 4 },
+  gruaTelefono: { fontSize: 14, color: COLORS.primary },
   gruaDistancia: { alignItems: 'center' },
-  distanciaNumero:  { fontSize: 24, fontWeight: 'bold', color: '#1E40AF' },
-  distanciaUnidad: { fontSize:  12, color:  '#6B7280' },
-  tiempoContainer: { flexDirection: 'row', alignItems:  'center', marginTop: 5, gap: 4 },
+  distanciaNumero: { fontSize: 24, fontWeight: 'bold', color: '#1E40AF' },
+  distanciaUnidad: { fontSize: 12, color: '#6B7280' },
+  tiempoContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 4 },
   tiempoText: { fontSize: 12, color: '#6B7280' },
+
+  // Resumen
   resumenCard: {
     backgroundColor: '#EEF2FF',
     margin: 15,
     marginBottom: 0,
-    borderRadius:  12,
-    padding: 15,
+    borderRadius: 16,
+    padding: 20,
   },
-  resumenTitle: { fontSize:  16, fontWeight: 'bold', color: '#4F46E5', marginBottom: 10 },
-  resumenRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  resumenLabel: { color: '#6366F1' },
-  resumenValue: { fontWeight: '600', color: '#4F46E5' },
-  resumenTotal: { 
-    marginTop: 10, 
-    paddingTop: 10, 
-    borderTopWidth: 1, 
-    borderTopColor: '#C7D2FE' 
+  resumenTitle: { fontSize: 18, fontWeight: 'bold', color: '#4F46E5', marginBottom: 15 },
+  resumenRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  resumenLabel: { color: '#6366F1', fontSize: 14 },
+  resumenValue: { fontWeight: '600', color: '#4F46E5', fontSize: 14 },
+  resumenTotal: {
+    marginTop: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#C7D2FE',
   },
-  resumenLabelTotal: { color: '#4F46E5', fontWeight: 'bold' },
-  resumenValueTotal: { fontWeight: 'bold', color:  '#059669', fontSize: 16 },
+  resumenLabelTotal: { color: '#4F46E5', fontWeight: 'bold', fontSize: 16 },
+  resumenValueTotal: { fontWeight: 'bold', color: '#059669', fontSize: 18 },
+
   buttonContainer: { padding: 15 },
 });

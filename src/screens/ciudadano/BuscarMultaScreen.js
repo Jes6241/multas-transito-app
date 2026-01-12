@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,24 +14,33 @@ import { useAuth } from '../../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../config/api';
 
-export default function BuscarMultaScreen({ navigation }) {
+export default function BuscarMultaScreen({ navigation, route }) {
   const { user } = useAuth();
-  const [placa, setPlaca] = useState('');
+  const placaInicial = route.params?.placaInicial || '';
+  const [placa, setPlaca] = useState(placaInicial);
   const [loading, setLoading] = useState(false);
   const [multas, setMultas] = useState([]);
 
-  const buscar = async () => {
-    if (!placa.trim()) {
+  // Si viene con placa inicial, buscar automáticamente
+  useEffect(() => {
+    if (placaInicial) {
+      buscar(placaInicial);
+    }
+  }, [placaInicial]);
+
+  const buscar = async (placaBuscar) => {
+    const placaABuscar = placaBuscar || placa;
+    if (!placaABuscar.trim()) {
       Alert.alert('Error', 'Por favor ingresa una placa');
       return;
     }
 
     setLoading(true);
     try {
-      const resultado = await api.buscarPorPlaca(placa. toUpperCase());
+      const resultado = await api.buscarPorPlaca(placaABuscar.toUpperCase());
       
-      if (resultado.success && resultado. multas) {
-        setMultas(resultado. multas);
+      if (resultado.success && resultado.multas) {
+        setMultas(resultado.multas);
         if (resultado.multas.length === 0) {
           Alert.alert('Info', 'No se encontraron multas para esta placa');
         }
@@ -40,7 +49,7 @@ export default function BuscarMultaScreen({ navigation }) {
         Alert.alert('Info', 'No se encontraron multas');
       }
     } catch (error) {
-      console. error(error);
+      console.error(error);
       Alert.alert('Error', 'No se pudo conectar con el servidor');
     } finally {
       setLoading(false);
@@ -51,16 +60,16 @@ export default function BuscarMultaScreen({ navigation }) {
   const asociarMulta = async (multa) => {
     try {
       const multasGuardadas = await AsyncStorage.getItem(`multas_${user?.id}`);
-      const multasUsuario = multasGuardadas ? JSON. parse(multasGuardadas) : [];
+      const multasUsuario = multasGuardadas ? JSON.parse(multasGuardadas) : [];
 
-      const yaExiste = multasUsuario.some(m => m.folio === multa. folio);
+      const yaExiste = multasUsuario.some(m => m.folio === multa.folio);
       if (yaExiste) {
         Alert.alert('Aviso', 'Esta multa ya está en tu cuenta');
         return;
       }
 
       multasUsuario.push(multa);
-      await AsyncStorage. setItem(`multas_${user?.id}`, JSON.stringify(multasUsuario));
+      await AsyncStorage.setItem(`multas_${user?.id}`, JSON.stringify(multasUsuario));
 
       Alert.alert('✅ Multa Agregada', 'La multa se agregó a tu cuenta');
     } catch (error) {
@@ -71,21 +80,21 @@ export default function BuscarMultaScreen({ navigation }) {
   const renderMulta = ({ item }) => (
     <View style={styles.multaCard}>
       <View style={styles.multaHeader}>
-        <Text style={styles.multaFolio}>Folio: {item. folio}</Text>
+        <Text style={styles.multaFolio}>Folio: {item.folio}</Text>
         <Text style={[
           styles.estado,
           { backgroundColor: item.estatus === 'pendiente' ? '#FEF3C7' : '#D1FAE5',
             color: item.estatus === 'pendiente' ? '#F59E0B' :  '#10B981' }
         ]}>
-          {item. estatus?. toUpperCase()}
+          {item.estatus?.toUpperCase()}
         </Text>
       </View>
-      <Text style={styles.multaInfo}>📅 Fecha: {new Date(item. created_at).toLocaleDateString('es-MX')}</Text>
-      <Text style={styles.multaInfo}>🚗 Placa: {item. vehiculos?.placa || item.placa}</Text>
-      <Text style={styles. multaInfo}>📍 {item.tipo_infraccion || 'Infracción'}</Text>
+      <Text style={styles.multaInfo}>📅 Fecha: {new Date(item.created_at).toLocaleDateString('es-MX')}</Text>
+      <Text style={styles.multaInfo}>🚗 Placa: {item.vehiculos?.placa || item.placa}</Text>
+      <Text style={styles.multaInfo}>📍 {item.tipo_infraccion || 'Infracción'}</Text>
       <Text style={styles.multaMonto}>💰 ${parseFloat(item.monto_final || 0).toLocaleString('es-MX')}</Text>
       
-      <View style={styles. botonesContainer}>
+      <View style={styles.botonesContainer}>
         <TouchableOpacity
           style={styles.agregarBtn}
           onPress={() => asociarMulta(item)}
@@ -110,7 +119,7 @@ export default function BuscarMultaScreen({ navigation }) {
       <Text style={styles.title}>🔍 Buscar por Placa</Text>
 
       <TextInput
-        style={styles. input}
+        style={styles.input}
         placeholder="Ingresa la placa (ej: ABC-123)"
         value={placa}
         onChangeText={setPlaca}
@@ -119,7 +128,7 @@ export default function BuscarMultaScreen({ navigation }) {
 
       <TouchableOpacity
         style={styles.button}
-        onPress={buscar}
+        onPress={() => buscar()}
         disabled={loading}
       >
         {loading ? (
@@ -132,7 +141,7 @@ export default function BuscarMultaScreen({ navigation }) {
       <FlatList
         data={multas}
         renderItem={renderMulta}
-        keyExtractor={(item, index) => item.id?. toString() || index.toString()}
+        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
         style={styles.lista}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

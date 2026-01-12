@@ -35,25 +35,29 @@ export default function RecibirVehiculoScreen({ route, navigation }) {
   const cargarDatos = async () => {
     try {
       // Cargar solicitudes pendientes
-      if (! solicitudParam) {
+      if (!solicitudParam) {
         const resSolicitudes = await fetch(`${API_URL}/api/solicitudes-grua`);
-        const dataSolicitudes = await resSolicitudes. json();
+        const dataSolicitudes = await resSolicitudes.json();
         if (dataSolicitudes.success) {
-          const pendientes = dataSolicitudes.solicitudes.filter(
+          const solicitudes = dataSolicitudes.solicitudes || [];
+          const pendientes = solicitudes.filter(
             (s) => s.estatus === 'pendiente' || s.estatus === 'en_camino'
           );
           setSolicitudes(pendientes);
+        } else {
+          setSolicitudes([]);
         }
       }
 
-      // Cargar corralones
-      const resCorralones = await fetch(`${API_URL}/api/corralones`);
+      // Cargar catálogo de corralones
+      const resCorralones = await fetch(`${API_URL}/api/corralones/catalogo`);
       const dataCorralones = await resCorralones.json();
-      if (dataCorralones.success) {
+      
+      if (dataCorralones.success && dataCorralones.corralones?.length > 0) {
         setCorralones(dataCorralones.corralones);
-        if (dataCorralones.corralones. length > 0) {
-          setCorralónSeleccionado(dataCorralones.corralones[0]);
-        }
+        setCorralónSeleccionado(dataCorralones.corralones[0]);
+      } else {
+        setCorralones([]);
       }
     } catch (error) {
       console.error('Error:', error);

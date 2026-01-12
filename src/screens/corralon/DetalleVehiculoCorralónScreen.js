@@ -16,16 +16,10 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SHADOWS } from '../../config/theme';
+import { TARIFAS_CORRALON, calcularCostosCorralon } from '../../config/corralon';
 
 const API_URL = 'https://multas-transito-api.onrender.com';
 const { width } = Dimensions.get('window');
-
-// Configuración de costos
-const COSTOS = {
-  arrastre: 850,
-  porDia: 150,
-  primerDiaGratis: false,
-};
 
 export default function DetalleVehiculoCorralónScreen({ route, navigation }) {
   const { vehiculo } = route.params;
@@ -96,27 +90,13 @@ export default function DetalleVehiculoCorralónScreen({ route, navigation }) {
     setModalVisible(true);
   };
 
-  const calcularDiasRetenido = () => {
-    if (!vehiculo.fecha_ingreso) return 1;
-    const ingreso = new Date(vehiculo. fecha_ingreso);
-    const hoy = new Date();
-    const dias = Math.ceil((hoy - ingreso) / (1000 * 60 * 60 * 24));
-    return dias < 1 ? 1 : dias;
-  };
+  // Usar la función centralizada para calcular costos
+  const costos = calcularCostosCorralon(
+    vehiculo.fecha_ingreso,
+    multa?.monto_final || 0
+  );
 
-  const calcularCostos = () => {
-    const dias = calcularDiasRetenido();
-    const diasCobrar = COSTOS. primerDiaGratis ? Math.max(0, dias - 1) : dias;
-    const costoArrastre = COSTOS.arrastre;
-    const costoEstancia = diasCobrar * COSTOS.porDia;
-    const costoMulta = multa?. monto_final || 0;
-    const total = costoArrastre + costoEstancia + costoMulta;
-
-    return { dias, diasCobrar, costoArrastre, costoEstancia, costoMulta, total };
-  };
-
-  const costos = calcularCostos();
-  const multaPagada = multa?. estatus === 'pagada';
+  const multaPagada = multa?.estatus === 'pagada';
   const yaLiberado = vehiculo.estatus === 'liberado';
 
   // Tomar foto de liberación
@@ -218,7 +198,7 @@ export default function DetalleVehiculoCorralónScreen({ route, navigation }) {
           <div class="seccion-titulo">📅 FECHAS</div>
           <div class="fila"><span class="etiqueta">Fecha de Ingreso: </span><span class="valor">${fechaIngreso}</span></div>
           <div class="fila"><span class="etiqueta">Fecha de Liberación: </span><span class="valor">${fechaActual}</span></div>
-          <div class="fila"><span class="etiqueta">Días en Corralón: </span><span class="valor">${costos.dias} día${costos.dias !== 1 ? 's' : ''}</span></div>
+          <div class="fila"><span class="etiqueta">Días en Corralón: </span><span class="valor">${costos.diasEstancia} día${costos.diasEstancia !== 1 ? 's' : ''}</span></div>
         </div>
 
         ${multa ? `
@@ -232,8 +212,8 @@ export default function DetalleVehiculoCorralónScreen({ route, navigation }) {
 
         <div class="seccion">
           <div class="seccion-titulo">💰 DESGLOSE DE COSTOS</div>
-          <div class="fila"><span class="etiqueta">Servicio de Arrastre (Grúa):</span><span class="valor">$${costos.costoArrastre. toLocaleString()} MXN</span></div>
-          <div class="fila"><span class="etiqueta">Estancia en Corralón (${costos.dias} días × $${COSTOS.porDia}):</span><span class="valor">$${costos.costoEstancia.toLocaleString()} MXN</span></div>
+          <div class="fila"><span class="etiqueta">Servicio de Grúa:</span><span class="valor">$${costos.costoGrua.toLocaleString()} MXN</span></div>
+          <div class="fila"><span class="etiqueta">Pensión en Corralón (${costos.diasEstancia} días × $${TARIFAS_CORRALON.COSTO_PENSION_DIARIA}):</span><span class="valor">$${costos.costoPensionTotal.toLocaleString()} MXN</span></div>
           ${multa ? `<div class="fila"><span class="etiqueta">Multa:</span><span class="valor">$${costos.costoMulta.toLocaleString()} MXN</span></div>` : ''}
         </div>
 
@@ -526,12 +506,12 @@ export default function DetalleVehiculoCorralónScreen({ route, navigation }) {
             <Ionicons name="calculator" size={20} color={COLORS. primary} /> Costos
           </Text>
           <View style={styles.costoRow}>
-            <Text style={styles.costoLabel}>Arrastre (grúa)</Text>
-            <Text style={styles. costoValor}>${costos.costoArrastre.toLocaleString()}</Text>
+            <Text style={styles.costoLabel}>Servicio de grúa</Text>
+            <Text style={styles.costoValor}>${costos.costoGrua.toLocaleString()}</Text>
           </View>
           <View style={styles.costoRow}>
-            <Text style={styles.costoLabel}>Estancia ({costos.dias} días)</Text>
-            <Text style={styles. costoValor}>${costos.costoEstancia.toLocaleString()}</Text>
+            <Text style={styles.costoLabel}>Pensión ({costos.diasEstancia} días × ${TARIFAS_CORRALON.COSTO_PENSION_DIARIA})</Text>
+            <Text style={styles.costoValor}>${costos.costoPensionTotal.toLocaleString()}</Text>
           </View>
           {multa && (
             <View style={styles.costoRow}>

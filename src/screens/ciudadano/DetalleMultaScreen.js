@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,125 +6,80 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS } from '../../config/theme';
 import Button from '../../components/Button';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+
+// Importar el generador de PDF de boleta de infracción
+import { generarPDF as generarBoletaPDF } from '../agente/utils/pdfGenerator';
+// Importar el generador de comprobante de pago
+import { generarComprobantePagoPDF } from './pagar/comprobantePagoPDF';
 
 export default function DetalleMultaScreen({ route, navigation }) {
   const { multa } = route.params;
+  const [generandoPDF, setGenerandoPDF] = useState(false);
 
   // ✅ Función para obtener la placa de cualquier fuente
   const obtenerPlaca = () => {
-    if (multa.vehiculos?.placa) return multa.vehiculos.placa;
-    if (multa.vehiculo?. placa) return multa.vehiculo. placa;
-    if (multa. Vehiculo?.placa) return multa.Vehiculo.placa;
-    if (multa. Vehiculos?.placa) return multa.Vehiculos.placa;
-    if (multa.placa) return multa.placa;
+    if (multa?.vehiculos?.placa) return multa.vehiculos.placa;
+    if (multa?.vehiculo?.placa) return multa.vehiculo.placa;
+    if (multa?.Vehiculo?.placa) return multa.Vehiculo.placa;
+    if (multa?.Vehiculos?.placa) return multa.Vehiculos.placa;
+    if (multa?.placa) return multa.placa;
     return 'N/A';
   };
 
   const placa = obtenerPlaca();
 
+  // ✅ Generar el PDF de la boleta de infracción oficial
   const generarComprobantePDF = async () => {
-    const html = `
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial; padding: 30px; }
-            .header { text-align: center; border-bottom: 2px solid #3B82F6; padding-bottom: 20px; }
-            .header h1 { color: #3B82F6; margin:  0; }
-            .header p { color: #666; margin:  5px 0; }
-            .section { margin:  20px 0; }
-            .section-title { font-size: 14px; color: #666; margin-bottom:  10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-            .row { display: flex; justify-content: space-between; margin: 8px 0; }
-            .label { color: #666; }
-            .value { font-weight: bold; color: #333; }
-            . monto-box { background:  #EEF2FF; padding: 20px; text-align: center; border-radius: 10px; margin: 20px 0; }
-            .monto { font-size: 36px; color: #4F46E5; font-weight: bold; }
-            . status { display: inline-block; padding:  5px 15px; border-radius: 20px; font-weight: bold; }
-            .status. pagada { background:  #D1FAE5; color:  #10B981; }
-            .status.pendiente { background: #FEF3C7; color: #F59E0B; }
-            .footer { text-align:  center; margin-top: 30px; color: #999; font-size:  12px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>🚗 Comprobante de Multa</h1>
-            <p>Sistema de Multas de Tránsito</p>
-          </div>
-          
-          <div class="section">
-            <div class="section-title">INFORMACIÓN DE LA MULTA</div>
-            <div class="row">
-              <span class="label">Folio:</span>
-              <span class="value">${multa.folio}</span>
-            </div>
-            <div class="row">
-              <span class="label">Fecha:</span>
-              <span class="value">${new Date(multa.created_at).toLocaleDateString('es-MX')}</span>
-            </div>
-            <div class="row">
-              <span class="label">Estatus:</span>
-              <span class="status ${multa.estatus}">${multa.estatus?. toUpperCase()}</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">DATOS DEL VEHÍCULO</div>
-            <div class="row">
-              <span class="label">Placa:</span>
-              <span class="value">${placa}</span>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">INFRACCIÓN</div>
-            <div class="row">
-              <span class="label">Tipo: </span>
-              <span class="value">${multa.tipo_infraccion || 'N/A'}</span>
-            </div>
-            <div class="row">
-              <span class="label">Descripción:</span>
-              <span class="value">${multa.descripcion || 'N/A'}</span>
-            </div>
-            <div class="row">
-              <span class="label">Ubicación:</span>
-              <span class="value">${multa.direccion || 'N/A'}</span>
-            </div>
-          </div>
-
-          <div class="monto-box">
-            <p style="margin:  0; color: #666;">Monto Total</p>
-            <p class="monto">$${parseFloat(multa. monto_final || 0).toLocaleString('es-MX')}</p>
-            ${multa.descuento > 0 ? `<p style="color: #10B981;">Incluye ${multa.descuento}% de descuento</p>` : ''}
-          </div>
-
-          <div class="section">
-            <div class="section-title">LÍNEA DE CAPTURA</div>
-            <p style="font-family: monospace; font-size: 18px; text-align: center; background: #f5f5f5; padding: 15px; border-radius: 8px;">
-              ${multa.linea_captura || 'N/A'}
-            </p>
-            <p style="text-align: center; color: #666; font-size: 12px;">
-              Fecha de vencimiento: ${multa.fecha_vencimiento || 'N/A'}
-            </p>
-          </div>
-
-          <div class="footer">
-            <p>Documento generado el ${new Date().toLocaleString('es-MX')}</p>
-            <p>Este documento es un comprobante válido de su multa de tránsito</p>
-          </div>
-        </body>
-      </html>
-    `;
-
+    setGenerandoPDF(true);
     try {
-      const { uri } = await Print. printToFileAsync({ html });
-      await Sharing.shareAsync(uri);
+      // Preparar datos de la multa para el generador de PDF
+      const datosParaPDF = {
+        ...multa,
+        placa: placa,
+        vehiculo: {
+          placa: placa,
+          marca: multa.vehiculos?.marca || multa.vehiculo?.marca || 'N/A',
+          modelo: multa.vehiculos?.modelo || multa.vehiculo?.modelo || 'N/A',
+          color: multa.vehiculos?.color || multa.vehiculo?.color || 'N/A',
+        },
+        infraccion: multa.tipo_infraccion,
+        monto: multa.monto || multa.monto_final,
+        linea_captura: multa.linea_captura,
+        fecha_vencimiento: multa.fecha_vencimiento || multa.vigencia_linea_captura,
+        ubicacion: multa.direccion || multa.ubicacion || 'N/A',
+        agente: {
+          nombre: multa.agente_nombre || multa.agentes?.nombre || 'Agente de Tránsito',
+          numero_placa: multa.agente_placa || multa.agentes?.numero_placa || 'N/A',
+        },
+      };
+
+      await generarBoletaPDF(datosParaPDF);
     } catch (error) {
+      console.error('Error generando PDF:', error);
       Alert.alert('Error', 'No se pudo generar el comprobante');
+    } finally {
+      setGenerandoPDF(false);
+    }
+  };
+
+  // ✅ Generar comprobante de pago (cuando la multa está pagada)
+  const descargarComprobantePago = async () => {
+    setGenerandoPDF(true);
+    try {
+      await generarComprobantePagoPDF({
+        ...multa,
+        placa: placa,
+      });
+    } catch (error) {
+      console.error('Error generando comprobante de pago:', error);
+      Alert.alert('Error', 'No se pudo generar el comprobante de pago');
+    } finally {
+      setGenerandoPDF(false);
     }
   };
 
@@ -141,7 +96,7 @@ export default function DetalleMultaScreen({ route, navigation }) {
   // ✅ Función para navegar a Impugnación
   const irAImpugnar = () => {
     navigation.navigate('Impugnacion', {
-      folio: multa. folio,
+      folio: multa.folio,
       multa: {
         ...multa,
         placa: placa,
@@ -177,7 +132,7 @@ export default function DetalleMultaScreen({ route, navigation }) {
       <View style={styles.card}>
         <View style={styles.folioContainer}>
           <Text style={styles.folioLabel}>Folio</Text>
-          <Text style={styles. folio}>{multa.folio}</Text>
+          <Text style={styles.folio}>{multa.folio}</Text>
         </View>
       </View>
 
@@ -185,8 +140,8 @@ export default function DetalleMultaScreen({ route, navigation }) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Información del Vehículo</Text>
         <View style={styles.infoRow}>
-          <Ionicons name="car" size={20} color={COLORS. gray[500]} />
-          <Text style={styles. infoLabel}>Placa:</Text>
+          <Ionicons name="car" size={20} color={COLORS.gray[500]} />
+          <Text style={styles.infoLabel}>Placa:</Text>
           <Text style={[styles.infoValue, styles.placaDestacada]}>{placa}</Text>
         </View>
         {(multa.vehiculos?.marca || multa.vehiculo?.marca) && (
@@ -194,25 +149,25 @@ export default function DetalleMultaScreen({ route, navigation }) {
             <Ionicons name="information-circle" size={20} color={COLORS.gray[500]} />
             <Text style={styles.infoLabel}>Marca:</Text>
             <Text style={styles.infoValue}>
-              {multa.vehiculos?. marca || multa. vehiculo?.marca}
+              {multa.vehiculos?.marca || multa.vehiculo?.marca}
             </Text>
           </View>
         )}
-        {(multa. vehiculos?.modelo || multa.vehiculo?.modelo) && (
+        {(multa.vehiculos?.modelo || multa.vehiculo?.modelo) && (
           <View style={styles.infoRow}>
-            <Ionicons name="calendar" size={20} color={COLORS. gray[500]} />
+            <Ionicons name="calendar" size={20} color={COLORS.gray[500]} />
             <Text style={styles.infoLabel}>Modelo: </Text>
-            <Text style={styles. infoValue}>
-              {multa. vehiculos?.modelo || multa.vehiculo?.modelo}
+            <Text style={styles.infoValue}>
+              {multa.vehiculos?.modelo || multa.vehiculo?.modelo}
             </Text>
           </View>
         )}
         {(multa.vehiculos?.color || multa.vehiculo?.color) && (
           <View style={styles.infoRow}>
-            <Ionicons name="color-palette" size={20} color={COLORS. gray[500]} />
+            <Ionicons name="color-palette" size={20} color={COLORS.gray[500]} />
             <Text style={styles.infoLabel}>Color:</Text>
             <Text style={styles.infoValue}>
-              {multa.vehiculos?.color || multa.vehiculo?. color}
+              {multa.vehiculos?.color || multa.vehiculo?.color}
             </Text>
           </View>
         )}
@@ -221,26 +176,26 @@ export default function DetalleMultaScreen({ route, navigation }) {
       {/* Detalles de la Infracción */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Detalles de la Infracción</Text>
-        <View style={styles. infoRow}>
+        <View style={styles.infoRow}>
           <Ionicons name="alert-circle" size={20} color={COLORS.gray[500]} />
           <Text style={styles.infoLabel}>Tipo:</Text>
           <Text style={styles.infoValue}>{multa.tipo_infraccion || 'N/A'}</Text>
         </View>
         <View style={styles.infoRow}>
           <Ionicons name="document-text" size={20} color={COLORS.gray[500]} />
-          <Text style={styles. infoLabel}>Descripción:</Text>
+          <Text style={styles.infoLabel}>Descripción:</Text>
           <Text style={styles.infoValue}>{multa.descripcion || 'N/A'}</Text>
         </View>
         <View style={styles.infoRow}>
           <Ionicons name="location" size={20} color={COLORS.gray[500]} />
           <Text style={styles.infoLabel}>Ubicación: </Text>
-          <Text style={styles. infoValue}>{multa.direccion || multa.ubicacion || 'N/A'}</Text>
+          <Text style={styles.infoValue}>{multa.direccion || multa.ubicacion || 'N/A'}</Text>
         </View>
         <View style={styles.infoRow}>
           <Ionicons name="calendar" size={20} color={COLORS.gray[500]} />
           <Text style={styles.infoLabel}>Fecha: </Text>
-          <Text style={styles. infoValue}>
-            {new Date(multa. fecha_infraccion || multa.created_at).toLocaleDateString('es-MX')}
+          <Text style={styles.infoValue}>
+            {new Date(multa.fecha_infraccion || multa.created_at).toLocaleDateString('es-MX')}
           </Text>
         </View>
       </View>
@@ -263,7 +218,7 @@ export default function DetalleMultaScreen({ route, navigation }) {
       {multa.linea_captura && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Línea de Captura</Text>
-          <View style={styles. lineaCapturaBox}>
+          <View style={styles.lineaCapturaBox}>
             <Text style={styles.lineaCaptura}>{multa.linea_captura}</Text>
           </View>
           {multa.fecha_vencimiento && (
@@ -276,30 +231,62 @@ export default function DetalleMultaScreen({ route, navigation }) {
 
       {/* Botones de Acción */}
       <View style={styles.actions}>
-        {multa.estatus === 'pendiente' && (
-          <Button
-            title="Pagar Multa"
-            onPress={irAPagar}
-            icon={<Ionicons name="card" size={20} color="#fff" />}
-          />
-        )}
+        {multa.estatus === 'pagada' ? (
+          // UI para multa pagada - solo mostrar comprobante de pago
+          <>
+            <View style={styles.pagadaInfo}>
+              <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+              <Text style={styles.pagadaText}>Pagada el {new Date(multa.fecha_pago || multa.updated_at).toLocaleDateString('es-MX')}</Text>
+            </View>
+            
+            <Button
+              title={generandoPDF ? "Generando..." : "📝 Descargar Comprobante de Pago"}
+              onPress={descargarComprobantePago}
+              disabled={generandoPDF}
+              icon={generandoPDF 
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="receipt" size={20} color="#fff" />
+              }
+            />
+            
+            <Button
+              title="Ver Boleta de Infracción Original"
+              variant="outline"
+              onPress={generarComprobantePDF}
+              disabled={generandoPDF}
+              style={{ marginTop: 10 }}
+              icon={<Ionicons name="document-text-outline" size={20} color={COLORS.primary} />}
+            />
+          </>
+        ) : (
+          // UI para multa pendiente
+          <>
+            <Button
+              title="Pagar Multa"
+              onPress={irAPagar}
+              icon={<Ionicons name="card" size={20} color="#fff" />}
+            />
 
-        <Button
-          title="Descargar Comprobante PDF"
-          variant="outline"
-          onPress={generarComprobantePDF}
-          style={{ marginTop: 10 }}
-          icon={<Ionicons name="download-outline" size={20} color={COLORS.primary} />}
-        />
+            <Button
+              title={generandoPDF ? "Generando PDF..." : "Descargar Boleta de Infracción"}
+              variant="outline"
+              onPress={generarComprobantePDF}
+              disabled={generandoPDF}
+              style={{ marginTop: 10 }}
+              icon={generandoPDF 
+                ? <ActivityIndicator size="small" color={COLORS.primary} />
+                : <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
+              }
+            />
 
-        {multa.estatus === 'pendiente' && (
-          <Button
-            title="Impugnar esta multa"
-            variant="outline"
-            onPress={irAImpugnar}
-            style={{ marginTop: 10 }}
-            icon={<Ionicons name="alert-circle-outline" size={20} color={COLORS.primary} />}
-          />
+            <Button
+              title="Impugnar esta multa"
+              variant="outline"
+              onPress={irAImpugnar}
+              style={{ marginTop: 10 }}
+              icon={<Ionicons name="alert-circle-outline" size={20} color={COLORS.primary} />}
+            />
+          </>
         )}
       </View>
 
@@ -308,7 +295,7 @@ export default function DetalleMultaScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet. create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
@@ -328,7 +315,7 @@ const styles = StyleSheet. create({
     marginBottom: 0,
     borderRadius: 12,
     padding: 15,
-    ... SHADOWS.small,
+    ...SHADOWS.small,
   },
   folioContainer:  {
     alignItems: 'center',
@@ -340,7 +327,7 @@ const styles = StyleSheet. create({
   folio: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS. primary,
+    color: COLORS.primary,
     marginTop: 5,
   },
   cardTitle: {
@@ -425,5 +412,20 @@ const styles = StyleSheet. create({
   },
   actions: {
     padding: 15,
+  },
+  pagadaInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 15,
+    gap: 10,
+  },
+  pagadaText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#065F46',
   },
 });
